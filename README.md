@@ -46,3 +46,28 @@ Playlist creation, generation, and cross-platform transfer app.
 - [ ] Spike: YouTube Music unofficial API viability + ToS risk
 - [ ] Spike: Spotify + Apple Music OAuth flow end-to-end
 - [ ] Wireframe create/generate/transfer flows
+
+## Getting started
+
+Requires Node 22 (`nvm use`), pnpm, and Docker.
+
+```sh
+pnpm install
+cp .env.example .env
+pnpm db:up        # Postgres 17 on :5432 (waits until healthy)
+pnpm db:migrate
+pnpm dev          # API on :3000, web on :5173
+```
+
+Open http://localhost:5173 — it shows API and DB status from `/api/health`.
+
+| Script | Does |
+|--------|------|
+| `pnpm dev` | API + web in watch mode |
+| `pnpm build` | Build all apps |
+| `pnpm check` | Typecheck, lint, test (API integration test needs `pnpm db:up`) |
+| `pnpm format` | Format with Biome |
+| `pnpm db:up` / `pnpm db:down` | Start / stop Postgres |
+| `pnpm db:generate` / `pnpm db:migrate` | Create / apply Drizzle migrations |
+
+Layout: `apps/api` (Hono), `apps/web` (Vite + React), `packages/shared` (zod schemas), `packages/db` (Drizzle), `packages/config` (tsconfig bases).
