@@ -1,7 +1,7 @@
 # Tunelynk Monorepo Scaffold — Design
 
 **Date:** 2026-09-29
-**Status:** Draft, pending review
+**Status:** Approved
 
 ## Goal
 
