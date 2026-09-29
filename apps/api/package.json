@@ -12,7 +12,8 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
-    "test": "vitest run"
+    "test": "vitest run --exclude \"src/**/*.integration.test.ts\"",
+    "test:integration": "vitest run integration"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",

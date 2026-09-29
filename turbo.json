@@ -6,10 +6,11 @@
     "transit": { "dependsOn": ["^transit"] },
     "typecheck": { "dependsOn": ["transit"] },
     "lint": {},
-    "test": {
+    "test": { "dependsOn": ["transit"] },
+    "test:integration": {
       "dependsOn": ["transit"],
-      "env": ["DATABASE_URL"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.env"]
+      "cache": false,
+      "passThroughEnv": ["DATABASE_URL"]
     }
   }
 }
