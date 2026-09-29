@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDb, ping } from "./index";
+import { createDb, type Db, ping } from "./index";
 
 describe("ping", () => {
   it("rejects without throwing at construction when Postgres is unreachable", async () => {
@@ -8,4 +8,9 @@ describe("ping", () => {
     await expect(ping(db)).rejects.toThrow();
     await db.$client.end();
   }, 10_000);
+
+  it("rejects when a query never answers (paused DB, dead socket)", async () => {
+    const hung = { execute: () => new Promise(() => {}) } as unknown as Db;
+    await expect(ping(hung, 50)).rejects.toThrow(/timed out/);
+  });
 });
