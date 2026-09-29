@@ -14,7 +14,7 @@ export type Db = ReturnType<typeof createDb>;
 // connect_timeout only covers new connections; a pooled socket to a paused or
 // vanished DB can wait minutes, so bound the whole query.
 export async function ping(db: Db, timeoutMs = 3000): Promise<void> {
-  let timer: NodeJS.Timeout | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
       () => reject(new Error(`DB ping timed out after ${timeoutMs}ms`)),

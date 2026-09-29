@@ -3,9 +3,11 @@
   "tasks": {
     "dev": { "cache": false, "persistent": true },
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "typecheck": {},
+    "transit": { "dependsOn": ["^transit"] },
+    "typecheck": { "dependsOn": ["transit"] },
     "lint": {},
     "test": {
+      "dependsOn": ["transit"],
       "env": ["DATABASE_URL"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.env"]
     }
