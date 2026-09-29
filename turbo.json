@@ -1,0 +1,13 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "tasks": {
+    "dev": { "cache": false, "persistent": true },
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    "typecheck": {},
+    "lint": {},
+    "test": {
+      "env": ["DATABASE_URL"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/.env"]
+    }
+  }
+}

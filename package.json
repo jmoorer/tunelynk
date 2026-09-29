@@ -1,0 +1,24 @@
+{
+  "name": "tunelynk",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check": "turbo typecheck lint test",
+    "format": "biome format --write .",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @tunelynk/db db:generate",
+    "db:migrate": "pnpm --filter @tunelynk/db db:migrate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
+    "turbo": "^2.11.5",
+    "typescript": "^7.0.2"
+  }
+}
