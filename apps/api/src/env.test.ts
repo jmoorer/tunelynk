@@ -15,6 +15,10 @@ describe("parseEnv", () => {
     expect(parseEnv({ DATABASE_URL }).PORT).toBe(3000);
   });
 
+  it("defaults PORT to 3000 when it is empty (`PORT=` in .env)", () => {
+    expect(parseEnv({ DATABASE_URL, PORT: "" }).PORT).toBe(3000);
+  });
+
   it("fails naming DATABASE_URL when it is missing", () => {
     expect(() => parseEnv({})).toThrow(/DATABASE_URL/);
   });

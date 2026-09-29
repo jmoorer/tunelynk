@@ -2,7 +2,11 @@ import { z } from "zod";
 
 const EnvSchema = z.object({
   DATABASE_URL: z.url(),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  // `PORT=` in .env arrives as ""; treat it as unset so the default applies.
+  PORT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(1).max(65535).default(3000),
+  ),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
