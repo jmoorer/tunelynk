@@ -1,0 +1,4 @@
+{
+  "extends": "@tunelynk/config/tsconfig.react.json",
+  "include": ["src"]
+}
