@@ -1,4 +1,9 @@
 {
   "extends": "@tunelynk/config/tsconfig.react.json",
+  "compilerOptions": {
+    // Importing AppType makes tsc check apps/api and packages/db source, which
+    // is Node code. Browser code must still avoid Node globals at runtime.
+    "types": ["vite/client", "node"]
+  },
   "include": ["src"]
 }
