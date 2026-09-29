@@ -9,12 +9,13 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "check": "turbo typecheck lint test test:integration",
+    "check": "turbo typecheck lint lint:root test test:integration",
     "format": "biome format --write .",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @tunelynk/db db:generate",
-    "db:migrate": "pnpm --filter @tunelynk/db db:migrate"
+    "db:migrate": "pnpm --filter @tunelynk/db db:migrate",
+    "lint:root": "biome check *.json"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",
