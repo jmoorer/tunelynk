@@ -14,6 +14,13 @@ export type AppDeps = {
 const isApiPath = (path: string) => path === "/api" || path.startsWith("/api/");
 // Last segment has a dot: a file request, so a miss is a real 404, not a client route.
 const looksLikeFile = (path: string) => /\.[^/]*$/.test(path);
+// Vite content-hashes everything under /assets, so those never change. Anything
+// else (index.html above all) must be revalidated, or a redeploy leaves browsers
+// on an old index.html that points at assets which no longer exist.
+const cacheControl = (path: string) =>
+  path.startsWith("/assets/")
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
 
 export function createApp({ db, webDir }: AppDeps) {
   const api = new Hono().get("/health", async (c) => {
@@ -34,9 +41,12 @@ export function createApp({ db, webDir }: AppDeps) {
 
   if (webDir) {
     const assets = serveStatic({ root: webDir });
-    app.use("*", (c, next) =>
-      isApiPath(c.req.path) ? next() : assets(c, next),
-    );
+    app.use("*", async (c, next) => {
+      if (isApiPath(c.req.path)) return next();
+      const res = await assets(c, next);
+      res?.headers.set("Cache-Control", cacheControl(c.req.path));
+      return res;
+    });
   }
 
   app.notFound((c) => {
@@ -45,7 +55,9 @@ export function createApp({ db, webDir }: AppDeps) {
       (method === "GET" || method === "HEAD") &&
       !isApiPath(path) &&
       !looksLikeFile(path);
-    if (indexHtml && spaRoute) return c.html(indexHtml);
+    if (indexHtml && spaRoute) {
+      return c.html(indexHtml, 200, { "Cache-Control": "no-cache" });
+    }
     return c.json({ error: "Not Found" }, 404);
   });
 

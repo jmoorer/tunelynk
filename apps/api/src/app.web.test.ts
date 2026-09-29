@@ -46,6 +46,20 @@ describe("createApp with webDir", () => {
     expect(await res.text()).toBe("console.log(1)");
   });
 
+  it("tells browsers to revalidate index.html so a redeploy is picked up", async () => {
+    for (const path of ["/", "/index.html", "/playlists/123"]) {
+      const res = await app().request(path);
+      expect(res.headers.get("cache-control")).toBe("no-cache");
+    }
+  });
+
+  it("lets browsers cache hashed assets forever", async () => {
+    const res = await app().request("/assets/app.js");
+    expect(res.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+  });
+
   it("still serves the API", async () => {
     const res = await app().request("/api/health");
     expect(res.status).toBe(200);
