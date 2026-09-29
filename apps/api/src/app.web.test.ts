@@ -1,0 +1,91 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Db } from "@tunelynk/db";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createApp } from "./app";
+
+const fakeDb = { execute: async () => [] } as unknown as Db;
+const INDEX = "<!doctype html><title>tunelynk</title>";
+
+let root: string;
+let webDir: string;
+
+beforeAll(() => {
+  root = mkdtempSync(join(tmpdir(), "tunelynk-web-"));
+  webDir = join(root, "dist");
+  mkdirSync(join(webDir, "assets"), { recursive: true });
+  writeFileSync(join(webDir, "index.html"), INDEX);
+  writeFileSync(join(webDir, "assets", "app.js"), "console.log(1)");
+  // Outside webDir: must never be reachable.
+  writeFileSync(join(root, "secret.txt"), "TOP SECRET");
+});
+
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+describe("createApp with webDir", () => {
+  const app = () => createApp({ db: fakeDb, webDir });
+
+  it("serves index.html at /", async () => {
+    const res = await app().request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  it("falls back to index.html for client-side routes", async () => {
+    const res = await app().request("/playlists/123");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/text\/html/);
+    expect(await res.text()).toBe(INDEX);
+  });
+
+  it("serves built assets with their content type", async () => {
+    const res = await app().request("/assets/app.js");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/javascript/);
+    expect(await res.text()).toBe("console.log(1)");
+  });
+
+  it("still serves the API", async () => {
+    const res = await app().request("/api/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, db: "up" });
+  });
+
+  it("returns JSON 404 for unknown API routes, not the SPA", async () => {
+    const res = await app().request("/api/nope");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+
+  it("returns 404 for a missing asset (stale hash after redeploy), not the SPA", async () => {
+    const res = await app().request("/assets/index-OLD.js");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+
+  it("does not fall back to the SPA for non-GET requests", async () => {
+    const res = await app().request("/playlists", { method: "POST" });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+
+  it("never serves files outside webDir", async () => {
+    for (const path of [
+      "/%2e%2e/secret.txt",
+      "/..%2fsecret.txt",
+      "/assets/%2e%2e/%2e%2e/secret.txt",
+    ]) {
+      const res = await app().request(path);
+      expect(await res.text()).not.toContain("TOP SECRET");
+    }
+  });
+});
+
+describe("createApp without webDir", () => {
+  it("returns JSON 404 for /", async () => {
+    const res = await createApp({ db: fakeDb }).request("/");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "Not Found" });
+  });
+});
