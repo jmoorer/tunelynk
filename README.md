@@ -49,7 +49,7 @@ Playlist creation, generation, and cross-platform transfer app.
 
 ## Getting started
 
-Requires Node 22 (`nvm use`), pnpm, and Docker.
+Requires Node 22.9+ (`nvm use`), pnpm, and Docker.
 
 ```sh
 pnpm install
@@ -65,7 +65,7 @@ Open http://localhost:5173 — it shows API and DB status from `/api/health`.
 |--------|------|
 | `pnpm dev` | API + web in watch mode |
 | `pnpm build` | Build all apps |
-| `pnpm check` | Typecheck, lint, test (API integration test needs `pnpm db:up`) |
+| `pnpm check` | Typecheck, lint, unit tests, and the uncached API integration test (needs `pnpm db:up`) |
 | `pnpm format` | Format with Biome |
 | `pnpm db:up` / `pnpm db:down` | Start / stop Postgres |
 | `pnpm db:generate` / `pnpm db:migrate` | Create / apply Drizzle migrations |

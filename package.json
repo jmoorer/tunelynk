@@ -4,12 +4,12 @@
   "type": "module",
   "packageManager": "pnpm@11.5.1",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
-    "check": "turbo typecheck lint test",
+    "check": "turbo typecheck lint test test:integration",
     "format": "biome format --write .",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
