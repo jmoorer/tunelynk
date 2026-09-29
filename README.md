@@ -49,7 +49,7 @@ Playlist creation, generation, and cross-platform transfer app.
 
 ## Getting started
 
-Requires Node 22 (`nvm use`), pnpm, and Docker.
+Requires Node 22.9+ (`nvm use`), pnpm, and Docker.
 
 ```sh
 pnpm install
