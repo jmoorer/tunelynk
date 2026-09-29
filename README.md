@@ -70,4 +70,6 @@ Open http://localhost:5173 — it shows API and DB status from `/api/health`.
 | `pnpm db:up` / `pnpm db:down` | Start / stop Postgres |
 | `pnpm db:generate` / `pnpm db:migrate` | Create / apply Drizzle migrations |
 
+Deployment: see [docs/deploy.md](docs/deploy.md) (Dokploy, `tunelynk.bytmoor.com`).
+
 Layout: `apps/api` (Hono), `apps/web` (Vite + React), `packages/shared` (zod schemas), `packages/db` (Drizzle), `packages/config` (tsconfig bases).
