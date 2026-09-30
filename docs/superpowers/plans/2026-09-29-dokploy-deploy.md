@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Tunelynk deployable as a single Nixpacks app on Dokploy: the API applies Drizzle migrations before it starts, serves the built web SPA alongside `/api`, and shuts down cleanly.
+**Goal:** Make Tunelynk deployable as a single app on Dokploy: the API applies Drizzle migrations before it starts, serves the built web SPA alongside `/api`, and shuts down cleanly.
 
-**Architecture:** `packages/db` gains `migrateDb()`. `apps/api` gets a second tsup entry (`migrate.ts`) that runs migrations, and `createApp` can optionally serve `apps/web/dist` with an SPA fallback. Nixpacks builds the whole repo and starts it with `node apps/api/dist/migrate.js && exec node apps/api/dist/index.js`. The Dokploy side (Postgres service, env, domain, health check) is a manual checklist in `docs/deploy.md`.
+**Architecture:** `packages/db` gains `migrateDb()`. `apps/api` gets a second tsup entry (`migrate.ts`) that runs migrations, and `createApp` can optionally serve `apps/web/dist` with an SPA fallback. The Dockerfile (Task 4's fallback, taken during execution) builds the whole repo and starts it with `node apps/api/dist/migrate.js && exec node apps/api/dist/index.js`. The Dokploy side (Postgres service, env, domain, health check) is a manual checklist in `docs/deploy.md`.
 
-**Tech Stack:** pnpm 11 + Turborepo, Hono on `@hono/node-server` 2.1, drizzle-orm 0.45 (postgres-js), tsup, Vitest 5, Nixpacks 1.41, Dokploy.
+**Tech Stack:** pnpm 11 + Turborepo, Hono on `@hono/node-server` 2.1, drizzle-orm 0.45 (postgres-js), tsup, Vitest 5, Docker (`node:22-slim`), Dokploy. Nixpacks 1.41 was tried in Task 4 and rejected.
 
 **Spec:** `docs/superpowers/specs/2026-09-29-dokploy-deploy-design.md`
 
