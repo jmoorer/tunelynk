@@ -6,7 +6,9 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
 
 ## How a deploy works
 
-1. Docker builds the repo using `Dockerfile`: `pnpm install`, then `pnpm build`.
+1. Docker builds the repo using `Dockerfile`, as the non-root `node` user:
+   `pnpm fetch` (cached until `pnpm-lock.yaml` changes), then an offline
+   `pnpm install` and `pnpm build`.
    (Not Nixpacks: its Node versions are too old for the lockfile's engine ranges.)
 2. The container starts with
    `node apps/api/dist/migrate.js && exec node apps/api/dist/index.js`.
@@ -29,8 +31,9 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    DATABASE_URL=<internal Postgres URL from step 1>
    PORT=3000
    ```
-   Do not set `NODE_ENV=production`. The build does not need it, and pnpm
-   would skip the devDependencies the build requires.
+   No `NODE_ENV` is needed; the app does not read it. (The Dockerfile forces
+   `NODE_ENV=development` for `pnpm install`, so the build is safe even if
+   one is set.)
 4. **Domain.** Host `tunelynk.bytmoor.com`, container port `3000`, HTTPS on,
    certificate Let's Encrypt. In DNS, add an A record for `tunelynk.bytmoor.com`
    pointing at the Dokploy server (skip if a `*.bytmoor.com` wildcard already does).

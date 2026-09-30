@@ -1,7 +1,9 @@
 # Tunelynk Dokploy Deployment — Design
 
 **Date:** 2026-09-29
-**Status:** Draft (pending review)
+**Status:** Implemented (PR #5)
+
+> **As built:** the build uses the Dockerfile, not Nixpacks. Nixpacks 1.41 pins Node 22.19 / 24.10 from a stale Nix snapshot, below `jsdom@30`'s engine range (`^22.22.2 || ^24.15.0`), and `engineStrict` makes `pnpm install` fail. `NODE_ENV` is not set in Dokploy (the app does not read it). Migrations run as a separate `migrate.js` entry in the start command rather than inside `index.ts`, so `pnpm dev` still boots with the DB down. Current setup: `docs/deploy.md`.
 
 ## Goal
 
@@ -19,8 +21,7 @@ Deploy Tunelynk to the user's existing Dokploy instance so that every push to `m
 | Area | Choice | Reason |
 |------|--------|--------|
 | Topology | One Dokploy application: the API serves `/api/*` and the built web SPA | Single domain, no CORS, relative `/api` calls work unchanged; web is static so no FE runtime needed. Two-app split (API + static site) rejected as premature |
-| Build | Nixpacks, configured by a committed `nixpacks.toml` | User preference; build config lives in the repo, not the Dokploy UI |
-| Fallback build | Multi-stage Dockerfile with the same start command | Used only if Nixpacks cannot install `pnpm@11.5.1` via corepack |
+| Build | Dockerfile (`node:22-slim`, non-root, cached `pnpm fetch` layer) | Nixpacks was preferred but its Node is too old for the lockfile's engine ranges (see *As built*) |
 | Database | Dokploy-managed Postgres 17 service, same project, internal network | User choice; Dokploy handles credentials and backups |
 | Migrations | Run at API startup via drizzle-orm's `migrate()` | No drizzle-kit in prod; failure blocks the deploy. Safe with a single instance |
 | Domain | `tunelynk.bytmoor.com`, HTTPS via Let's Encrypt | User choice; `tunelynk.com` not registered yet |
@@ -60,7 +61,7 @@ export async function migrateDb(url: string, migrationsFolder: string): Promise<
 5. `serve(...)` as today.
 6. On `SIGTERM`/`SIGINT`: close the HTTP server, end the DB client, exit 0. (Requires `createDb` to expose the underlying client or a `close` function.)
 
-Path resolution relies on the repo layout being preserved at runtime. It is, because Nixpacks copies the whole repo to `/app` and the start command runs the bundle in place.
+Path resolution relies on the repo layout being preserved at runtime. It is, because the Dockerfile copies the whole repo to `/app` and the start command runs the bundle in place.
 
 ### 4. Tests
 
@@ -73,6 +74,8 @@ Path resolution relies on the repo layout being preserved at runtime. It is, bec
   - Without `webDir`, `GET /` → 404 (current behaviour preserved).
 
 ## Build config
+
+> **Superseded:** kept as the original design record. The shipped build is the `Dockerfile` (see *As built* at the top).
 
 `nixpacks.toml` at repo root:
 
@@ -102,8 +105,8 @@ Confirm Nixpacks + corepack installs `pnpm@11.5.1` and `pnpm build` succeeds: ru
 Documented as a checklist in `docs/deploy.md`, linked from the README:
 
 1. **Postgres service**: create Postgres 17 in the Tunelynk project; let Dokploy generate credentials; do not expose it externally; copy the internal connection URL. Enable scheduled backups if a backup destination is configured.
-2. **Application**: GitHub provider, repo `jmoorer/tunelynk`, branch `main`, build type Nixpacks, auto-deploy on.
-3. **Environment**: `DATABASE_URL=<internal Postgres URL>`, `PORT=3000`, `NODE_ENV=production`.
+2. **Application**: GitHub provider, repo `jmoorer/tunelynk`, branch `main`, build type Dockerfile, auto-deploy on.
+3. **Environment**: `DATABASE_URL=<internal Postgres URL>`, `PORT=3000`.
 4. **Domain**: `tunelynk.bytmoor.com` → container port `3000`, HTTPS with Let's Encrypt. DNS: A record (or existing wildcard) for the subdomain pointing at the Dokploy host.
 5. **Health check**: in the app's Swarm settings, a health check hitting `http://localhost:3000/api/health`, so a container that fails to boot never replaces a healthy one.
 
