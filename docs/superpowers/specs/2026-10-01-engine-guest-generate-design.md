@@ -195,7 +195,7 @@ The flow map's `artists text[]` on `tracks` becomes `artist_name text` because A
 
 Body `{ prompt }`: trimmed, 1–280 characters (zod). Then:
 
-1. Budget: if today's (UTC) `SUM(llm_usage.cost_micros)` ≥ `LLM_DAILY_BUDGET_USD × 1e6`, return `503 { error: "budget_exceeded" }`.
+1. Budget: if today's (UTC) `SUM(llm_usage.cost_micros)` plus a worst-case reservation for every `queued`/`running` run is ≥ `LLM_DAILY_BUDGET_USD × 1e6`, return `503 { error: "budget_exceeded" }`. In-flight runs record usage only when they finish, so without the reservation concurrent requests overshoot the cap.
 2. One active run: if the user has a `queued` or `running` run, return `409 { error: "run_in_progress", runId, playlistId }`.
 3. Insert the playlist (`name` = prompt truncated to 60 characters, `length` = 20) and the run (`queued`, `llm_model` = configured guest model). Return `202 { runId, playlistId }`.
 4. `runExecutor.start(runId)`, fire and forget:
@@ -218,9 +218,9 @@ Returns `RunResponse`:
 
 404 for unknown or malformed ids.
 
-### Boot recovery
+### Stale-run sweep
 
-On startup, `queued` or `running` runs created more than 5 minutes ago → `failed` with "interrupted".
+Runs execute in-process and are bounded by a 120 s deadline, so any `queued` or `running` run older than the deadline plus 60 s is orphaned (restart, crash, or a DB error on the failure path). A sweeper marks them `failed` with "interrupted" at boot and then every 60 s. (Originally "older than 5 min, at boot only", but no run lives that long, so a redeploy's orphans were never caught.)
 
 ### Env additions (`apps/api/src/env.ts`)
 
@@ -261,7 +261,7 @@ On startup, `queued` or `running` runs created more than 5 minutes ago → `fail
 | Apple 429 / 5xx | Jittered backoff, 4 retries; shared bucket drained on 429 |
 | Apple 401 | Re-sign developer token, retry once |
 | Single search fails after retries | That candidate is `error`; the run continues |
-| Restart mid-run | Boot recovery marks it `failed` ("interrupted") |
+| Restart mid-run | The stale-run sweep (boot + every 60 s) marks it `failed` ("interrupted") |
 | No preview URL | No ▶ on that row |
 | Anything else | Run `failed`: "Something went wrong generating this playlist." Full error logged |
 

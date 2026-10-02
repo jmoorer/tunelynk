@@ -52,6 +52,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
   let engine: Engine;
   let pending: Promise<void>[];
   let secureCookies: boolean;
+  let reservePerRunMicros: number;
   let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
@@ -64,6 +65,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     engine = async () => okResult;
     pending = [];
     secureCookies = false;
+    reservePerRunMicros = 0;
     const repo = createRunRepo(handle.db);
     const real = createRunExecutor({
       repo,
@@ -87,6 +89,9 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
             return secureCookies;
           },
           dailyBudgetMicros: 2_000_000,
+          get reservePerRunMicros() {
+            return reservePerRunMicros;
+          },
           model: "claude-haiku-4-5",
         },
       });
@@ -245,6 +250,15 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "budget_exceeded" });
     expect(await count(playlists)).toBe(0);
+  });
+
+  it("reserves budget for runs still in flight", async () => {
+    reservePerRunMicros = 2_000_000;
+    engine = () => new Promise(() => {});
+    expect((await post({ prompt: "first guest" })).status).toBe(202);
+    const second = await post({ prompt: "second guest, no cookie" });
+    expect(second.status).toBe(503);
+    expect(await second.json()).toEqual({ error: "budget_exceeded" });
   });
 
   it("reuses the guest across runs with the same cookie", async () => {

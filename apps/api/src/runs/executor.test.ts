@@ -109,6 +109,21 @@ describe("createRunExecutor", () => {
     );
   });
 
+  it("still fails the run when recording usage fails on the error path", async () => {
+    const repo = fakeRepo({
+      recordUsage: vi.fn(async () => Promise.reject(new Error("db blip"))),
+    });
+    const engine: Engine = async () => {
+      throw new RefusalError("not music", usage);
+    };
+    await createRunExecutor({ repo, engine, logger: quietLogger() }).start(job);
+    expect(repo.failRun).toHaveBeenCalledWith(
+      "run-1",
+      RUN_ERRORS.refusal,
+      undefined,
+    );
+  });
+
   it("uses the generic message for unexpected errors and logs them", async () => {
     const repo = fakeRepo();
     const logger = quietLogger();

@@ -220,6 +220,19 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
     expect(await repo.todaysCostMicros()).toBe(before + 1100);
   });
 
+  it("reserves cost for every active run", async () => {
+    await newRun();
+    const [row] = await handle.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(generationRuns)
+      .where(sql`${generationRuns.status} in ('queued', 'running')`);
+    const active = row?.n ?? 0;
+    expect(active).toBeGreaterThan(0);
+    const spent = await repo.todaysCostMicros();
+    expect(await repo.committedCostMicros(0)).toBe(spent);
+    expect(await repo.committedCostMicros(500)).toBe(spent + 500 * active);
+  });
+
   it("touches last_seen_at at most once a minute", async () => {
     const userId = await repo.createGuest();
     await handle.db

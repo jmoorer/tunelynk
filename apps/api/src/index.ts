@@ -1,12 +1,13 @@
 import { serve } from "@hono/node-server";
 import { createAppleCatalog } from "@tunelynk/connectors";
 import { createDb } from "@tunelynk/db";
-import { createLlmProvider, generate } from "@tunelynk/engine";
+import { costMicros, createLlmProvider, generate } from "@tunelynk/engine";
 import { createApp } from "./app";
 import { loadEnv } from "./env";
 import { resolveRuntimePaths } from "./paths";
-import { createRunExecutor } from "./runs/executor";
+import { createRunExecutor, RUN_DEADLINE_MS } from "./runs/executor";
 import { createRunRepo } from "./runs/repo";
+import { startStaleRunSweeper } from "./runs/sweeper";
 
 const env = loadEnv();
 const { webDir } = resolveRuntimePaths(import.meta.url);
@@ -43,17 +44,23 @@ const app = createApp({
     sessionSecret: env.SESSION_SECRET,
     secureCookies: env.COOKIE_SECURE,
     dailyBudgetMicros: Math.round(env.LLM_DAILY_BUDGET_USD * 1_000_000),
+    // Worst case per run: two LLM attempts, each up to ~2k input tokens and
+    // LLM_MAX_TOKENS output.
+    reservePerRunMicros: costMicros({
+      model: env.LLM_MODEL_GUEST,
+      inputTokens: 2 * 2_000,
+      outputTokens: 2 * env.LLM_MAX_TOKENS,
+    }),
     model: env.LLM_MODEL_GUEST,
   },
 });
 
-// In-process runs die with the process; fail the ones a restart orphaned.
-try {
-  const failed = await repo.failStaleRuns(5 * 60_000);
-  if (failed > 0) console.log(`Marked ${failed} interrupted run(s) as failed`);
-} catch (err) {
-  console.error("Boot recovery failed:", err);
-}
+// No run outlives the executor deadline; fail orphans at boot and every minute.
+startStaleRunSweeper({
+  repo,
+  olderThanMs: RUN_DEADLINE_MS + 60_000,
+  intervalMs: 60_000,
+});
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`API listening on http://localhost:${info.port}`);

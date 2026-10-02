@@ -20,6 +20,7 @@ export type RunsDeps = {
   sessionSecret: string;
   secureCookies: boolean;
   dailyBudgetMicros: number;
+  reservePerRunMicros: number;
   model: string;
 };
 
@@ -60,7 +61,10 @@ export function runsRoutes(deps: RunsDeps) {
       }
       const prompt = body.data.prompt;
 
-      if ((await deps.repo.todaysCostMicros()) >= deps.dailyBudgetMicros) {
+      const committed = await deps.repo.committedCostMicros(
+        deps.reservePerRunMicros,
+      );
+      if (committed >= deps.dailyBudgetMicros) {
         return c.json({ error: "budget_exceeded" } satisfies ApiError, 503);
       }
 

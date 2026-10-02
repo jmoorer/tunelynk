@@ -74,7 +74,10 @@ export function createRunExecutor({
     } catch (err) {
       logger.error(`run ${job.runId} failed`, err);
       if (err instanceof EngineError && err.usage) {
-        await recordUsage(job.userId, err.usage);
+        // A failed usage write must not leave the run stuck in "running".
+        await recordUsage(job.userId, err.usage).catch((usageErr) =>
+          logger.error(`run ${job.runId}: usage write failed`, usageErr),
+        );
       }
       await repo.failRun(
         job.runId,

@@ -68,6 +68,20 @@ export function createRunRepo(db: Db) {
       return Number(row?.total ?? 0);
     },
 
+    // Today's spend plus a worst-case reservation for every run still in
+    // flight, whose usage is only recorded when it finishes. Without the
+    // reservation a burst of cookieless requests overshoots the daily cap.
+    async committedCostMicros(reservePerRunMicros: number): Promise<number> {
+      const [row] = await db
+        .select({ active: sql<number>`count(*)::int` })
+        .from(generationRuns)
+        .where(inArray(generationRuns.status, ACTIVE));
+      return (
+        (await this.todaysCostMicros()) +
+        (row?.active ?? 0) * reservePerRunMicros
+      );
+    },
+
     // One active run per user. The advisory lock serializes concurrent POSTs
     // for the same user so both can't pass the check.
     async createRun(args: {
