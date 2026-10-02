@@ -57,6 +57,9 @@ importers:
       '@types/node':
         specifier: ^26.6.3
         version: 26.6.3
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.28)(tsx@4.23.15)(typescript@7.0.2)
