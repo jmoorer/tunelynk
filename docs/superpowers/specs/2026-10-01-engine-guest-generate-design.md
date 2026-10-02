@@ -38,7 +38,7 @@ The flow map fixes the shape: the LLM proposes tracks, the Apple catalog verifie
 |---|---|---|
 | Delivery | Four slices, one PR each: A connector, B engine, C runs API, D guest web | Each slice is testable and demo-able on its own |
 | LLM provider | `LLM_PROVIDER=anthropic\|openai`; Anthropic first (Haiku 4.5 for `guest`) | Switchable without code changes; Haiku keeps latency and cost low |
-| Structured output | Anthropic tool use; OpenAI `json_schema` response format; one zod schema validates both | Same contract regardless of provider |
+| Structured output | Anthropic Messages `output_config.format` (`zodOutputFormat`); OpenAI Responses `text.format` (`zodTextFormat`); both sent with the SDK's `create()`, and one zod schema validates the raw text in a shared core | Same contract regardless of provider. `.parse()` is not used because it throws on a mismatch and drops token usage (verified 2026-10-01) |
 | Cost | `pricing.ts` table of per-model token prices; unknown model fails startup | Cost can never be silently untracked |
 | Guest identity | `users` row with `is_guest = true`; HMAC-signed httpOnly cookie `tl_guest=<userId>.<sig>` keyed by `SESSION_SECRET` | Stays inside #10; #2 adds `sessions` and converts the guest cookie on claim |
 | Guest length | Fixed at 20 tracks (32 candidates) | ~32 searches ≈ 4 s of catalog time; well under a minute with the LLM call |
@@ -67,7 +67,7 @@ packages/db           schema: users, playlists, generation_runs, run_tracks, tra
 packages/shared       zod: CreateRunRequest, CreateRunResponse, RunResponse, RunTrack, RunStatus, RunStage
 apps/api              guest cookie middleware, routes/runs.ts, runExecutor.ts, budget.ts, boot recovery
 apps/web              Landing, RunView, TrackRow, useRun, usePreviewPlayer
-scripts/eval-llm.ts   20 fixed prompts → match / duplicate / refusal rates (not CI)
+packages/engine/src/bin/eval.ts   20 fixed prompts → match / duplicate / refusal rates (not CI)
 ```
 
 - The engine is pure. It receives `{ catalog, llm }` and does no DB or HTTP work itself.
@@ -108,7 +108,7 @@ interface LlmProvider {
 }
 
 // LlmOutput (zod)
-{ refusal?: string;
+{ refusal: string | null;            // null when it is a music request (structured outputs need every field)
   name: string;                       // ≤60 chars
   plan: { artists: string[]; vibe: string };   // artists ≤10
   candidates: { title: string; artist: string }[] }
@@ -135,7 +135,7 @@ interface LlmProvider {
 - The system prompt tells the model to act as a music curator and return only structured output. The user's text is wrapped in `<request>…</request>` and labelled as data, not instructions.
 - It asks for `count = ceil(1.6 × length)` candidates that are mostly findable on Apple Music, at most 3 per artist unless the request asks otherwise, and no live, cover, or karaoke versions unless requested.
 - It asks for `refusal` when the request is not a playlist request.
-- Each adapter enforces a 60 s timeout and `max_tokens = LLM_MAX_TOKENS`. On timeout or network error it retries once. On a schema validation failure it retries once with a repair message that includes the validation error.
+- Each adapter sets a 60 s timeout and `max_tokens = LLM_MAX_TOKENS`. The SDK client (`maxRetries: 1`) retries once on timeout, network error, 429, or 5xx. On a schema validation failure the shared core retries once with a repair message that includes the validation error, and sums usage across both attempts.
 - `pricing.ts` converts usage to `costMicros`. If `LLM_MODEL_GUEST` is not in the table, startup fails.
 
 ### Matcher
@@ -231,7 +231,7 @@ On startup, `queued` or `running` runs created more than 5 minutes ago → `fail
 | `APPLE_CATALOG_RPS` / `_BURST` / `_CONCURRENCY` | 8 / 10 / 4 | From the spike |
 | `SESSION_SECRET` | required | ≥32 characters |
 | `LLM_PROVIDER` | `anthropic` | `anthropic` or `openai` |
-| `LLM_MODEL_GUEST` | `claude-haiku-4-5-20251001` | Must exist in `pricing.ts` |
+| `LLM_MODEL_GUEST` | `claude-haiku-4-5` | Must exist in `pricing.ts` |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | — | The one matching `LLM_PROVIDER` is required |
 | `LLM_MAX_TOKENS` | 2000 | |
 | `LLM_DAILY_BUDGET_USD` | 2 | |
@@ -270,7 +270,7 @@ On startup, `queued` or `running` runs created more than 5 minutes ago → `fail
 TDD within each slice.
 
 - **A (connector):** limiter with fake timers (burst, refill, max in flight, drain on 429); retry/backoff and 401 re-sign; `devToken` signs and verifies with a generated P-256 key; contract tests against recorded Apple JSON fixtures (search, songs by id, top songs) through an injected `fetch`, not msw; live smoke behind `APPLE_LIVE=1`, excluded from CI.
-- **B (engine):** matcher table fixtures (remaster, feat., live, karaoke, cover, multi-artist, diacritics); `generate()` with fake catalog and LLM (dedupe, exclude, cut, backfill and interleave, 50% rule, refusal, per-candidate search error, usage on error); adapter tests with an injected `fetch` (request shape, structured-output parsing, retry, timeout); CLI and `scripts/eval-llm.ts` run by hand.
+- **B (engine):** matcher table fixtures (remaster, feat., live, karaoke, cover, multi-artist, diacritics); `generate()` with fake catalog and LLM (dedupe, exclude, cut, backfill and interleave, 50% rule, refusal, per-candidate search error, usage on error); adapter tests with an injected `fetch` (request shape, structured-output parsing, retry); CLI and the eval script (`pnpm --filter @tunelynk/engine eval`) run by hand.
 - **C (API):** unit tests for env parsing, cookie sign/verify, budget math. Postgres integration tests with a fake engine: create → poll → draft, failure path, 409, budget 503, cookie reuse, `GET` does not create users, boot recovery.
 - **D (web):** Vitest + Testing Library for landing submit and error states, run view per status with mocked fetch, single-player behavior.
 - **Done when:** a local run with real Apple and LLM keys produces a playable preview in under a minute; then the same on Dokploy after its env vars are added (`docs/deploy.md` updated).
