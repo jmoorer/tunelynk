@@ -1,5 +1,5 @@
 import type { CatalogSource, CatalogTrack } from "@tunelynk/connectors";
-import { NotEnoughTracksError, RefusalError } from "./errors";
+import { EngineError, NotEnoughTracksError, RefusalError } from "./errors";
 import type { LlmProvider } from "./llm/types";
 import { artistScore, normalize, pickBest } from "./matcher";
 import type {
@@ -128,51 +128,66 @@ export async function generate(
   });
   if (output.refusal) throw new RefusalError(output.refusal, usage);
 
-  onStage("matching");
-  // The connector's shared limiter throttles these.
-  const matches = await Promise.all(
-    output.candidates.map(async (candidate) => {
-      try {
-        const results = await catalog.search(
-          `${candidate.artist} ${candidate.title}`,
-        );
-        return { ok: true as const, track: pickBest(candidate, results) };
-      } catch {
-        return { ok: false as const };
-      }
-    }),
-  );
+  const finish = async (): Promise<GenerateResult> => {
+    onStage("matching");
+    // The connector's shared limiter throttles these.
+    const matches = await Promise.all(
+      output.candidates.map(async (candidate) => {
+        try {
+          const results = await catalog.search(
+            `${candidate.artist} ${candidate.title}`,
+          );
+          return { ok: true as const, track: pickBest(candidate, results) };
+        } catch {
+          return { ok: false as const };
+        }
+      }),
+    );
 
-  const seen = createSeen(exclude);
-  const matched: GeneratedTrack[] = [];
-  const candidates: CandidateResult[] = output.candidates.map((c, i) => {
-    const base = { title: c.title, artist: c.artist };
-    const match = matches[i];
-    if (!match?.ok) return { ...base, status: "error" };
-    if (!match.track) return { ...base, status: "unmatched" };
-    const appleSongId = match.track.appleSongId;
-    if (seen.has(match.track))
-      return { ...base, status: "duplicate", appleSongId };
-    seen.add(match.track);
-    if (matched.length < length)
-      matched.push({ ...match.track, source: "llm" });
-    return { ...base, status: "matched", appleSongId };
+    const seen = createSeen(exclude);
+    const matched: GeneratedTrack[] = [];
+    const candidates: CandidateResult[] = output.candidates.map((c, i) => {
+      const base = { title: c.title, artist: c.artist };
+      const match = matches[i];
+      if (!match?.ok) return { ...base, status: "error" };
+      if (!match.track) return { ...base, status: "unmatched" };
+      const appleSongId = match.track.appleSongId;
+      if (seen.has(match.track))
+        return { ...base, status: "duplicate", appleSongId };
+      seen.add(match.track);
+      if (matched.length < length)
+        matched.push({ ...match.track, source: "llm" });
+      return { ...base, status: "matched", appleSongId };
+    });
+
+    const extra = await backfill(
+      catalog,
+      matched,
+      output.plan.artists,
+      length - matched.length,
+      seen,
+    );
+    const tracks = interleave(matched, extra);
+
+    const needed = Math.ceil(length / 2);
+    if (tracks.length < needed) {
+      throw new NotEnoughTracksError(tracks.length, needed, candidates, usage);
+    }
+
+    const name = output.name || prompt.trim().slice(0, MAX_NAME_LENGTH);
+    return { name, tracks, candidates, usage };
+  };
+
+  // Anything thrown after the LLM call still owes its cost: keep usage attached.
+  return finish().catch((err: unknown) => {
+    if (err instanceof EngineError) throw err;
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new EngineError(
+      `generate failed after the LLM call: ${reason}`,
+      usage,
+      {
+        cause: err,
+      },
+    );
   });
-
-  const extra = await backfill(
-    catalog,
-    matched,
-    output.plan.artists,
-    length - matched.length,
-    seen,
-  );
-  const tracks = interleave(matched, extra);
-
-  const needed = Math.ceil(length / 2);
-  if (tracks.length < needed) {
-    throw new NotEnoughTracksError(tracks.length, needed, candidates, usage);
-  }
-
-  const name = output.name || prompt.trim().slice(0, MAX_NAME_LENGTH);
-  return { name, tracks, candidates, usage };
 }

@@ -14,8 +14,8 @@ describe("costMicros", () => {
 
   it("rounds fractional micro-dollars", () => {
     expect(
-      costMicros({ model: "gpt-5-mini", inputTokens: 3, outputTokens: 0 }),
-    ).toBe(1); // 0.75 → 1
+      costMicros({ model: "gpt-4.1-mini", inputTokens: 2, outputTokens: 0 }),
+    ).toBe(1); // 0.8 → 1
   });
 
   it("throws for an unknown model", () => {
@@ -29,6 +29,11 @@ describe("assertPricedModel", () => {
   it("accepts priced models", () => {
     expect(() => assertPricedModel("claude-haiku-4-5")).not.toThrow();
     expect(() => assertPricedModel("gpt-4.1-mini")).not.toThrow();
+  });
+
+  it("rejects reasoning models until the adapter controls reasoning effort", () => {
+    // Their reasoning tokens count against LLM_MAX_TOKENS and truncate the JSON.
+    expect(() => assertPricedModel("gpt-5-mini")).toThrow(/No price/);
   });
 
   it("rejects unknown models, including Object prototype keys", () => {

@@ -2,12 +2,14 @@ import type { LlmUsage } from "./types";
 
 // USD per 1M tokens, which is also micro-dollars per token.
 // Sources: Anthropic model table and developers.openai.com/api/docs/pricing (2026-10-01).
+// Reasoning models (gpt-5*, o*) are left out on purpose: their reasoning tokens
+// count against LLM_MAX_TOKENS and truncate the JSON. Add them once the OpenAI
+// adapter sets a low reasoning effort.
 export const PRICES: Record<string, { input: number; output: number }> = {
   "claude-haiku-4-5": { input: 1, output: 5 },
   "claude-sonnet-5-5": { input: 2, output: 10 },
   "claude-opus-5-5": { input: 4, output: 20 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6 },
-  "gpt-5-mini": { input: 0.25, output: 2 },
 };
 
 function priceOf(model: string) {

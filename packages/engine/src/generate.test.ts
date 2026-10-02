@@ -1,6 +1,6 @@
 import type { CatalogSource, CatalogTrack } from "@tunelynk/connectors";
 import { describe, expect, it } from "vitest";
-import { NotEnoughTracksError, RefusalError } from "./errors";
+import { EngineError, NotEnoughTracksError, RefusalError } from "./errors";
 import { generate, interleave } from "./generate";
 import type {
   CandidateRequest,
@@ -196,6 +196,23 @@ describe("generate", () => {
     ]);
   });
 
+  it("keeps distinct non-Latin songs by the same artist", async () => {
+    const { catalog } = fakeCatalog({
+      search: {
+        "Кино Группа крови": [track("1", "Группа крови", "Кино")],
+        "Кино Кукушка": [track("2", "Кукушка", "Кино")],
+      },
+    });
+    const { llm } = fakeLlm({
+      candidates: [
+        { title: "Группа крови", artist: "Кино" },
+        { title: "Кукушка", artist: "Кино" },
+      ],
+    });
+    const result = await generate({ prompt: "p", length: 2 }, { catalog, llm });
+    expect(ids(result.tracks)).toEqual(["1", "2"]);
+  });
+
   it("passes the exclude list to the LLM and drops excluded tracks", async () => {
     const { catalog } = fakeCatalog({
       search: {
@@ -385,6 +402,23 @@ describe("generate", () => {
       needed: 10,
     });
     expect(calls.search).toEqual([]);
+  });
+
+  it("wraps unexpected failures after the LLM call in EngineError with usage", async () => {
+    const { catalog } = fakeCatalog({});
+    const { llm, usage } = fakeLlm({
+      candidates: [{ title: "Dreams", artist: "Fleetwood Mac" }],
+    });
+    const cause = new Error("db down");
+    const err = await generate(
+      { prompt: "p", length: 1 },
+      { catalog, llm },
+      (stage) => {
+        if (stage === "matching") throw cause;
+      },
+    ).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EngineError);
+    expect(err).toMatchObject({ usage, cause });
   });
 
   it("throws RefusalError with usage and never searches", async () => {

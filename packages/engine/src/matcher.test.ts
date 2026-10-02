@@ -36,6 +36,8 @@ describe("normalize", () => {
     ["  Don't   Stop  ", "don t stop"],
     ["Dreams [Bonus Track]", "dreams"],
     ["Dreams - Live", "dreams"],
+    ["Плачу на техно", "плачу на техно"],
+    ["MØ", "mø"],
   ])("%s → %s", (input, expected) => {
     expect(normalize(input)).toBe(expected);
   });
@@ -175,6 +177,54 @@ describe("scoreMatch", () => {
     expect(accepted(title, artist, t)).toBe(false);
   });
 
+  it("accepts non-Latin titles and artists", () => {
+    expect(
+      accepted(
+        "真夜中のドア〜stay with me",
+        "松原みき",
+        track("真夜中のドア〜stay with me", "松原みき"),
+      ),
+    ).toBe(true);
+    expect(
+      accepted(
+        "Плачу на техно",
+        "Cream Soda",
+        track("Плачу на техно", "Cream Soda"),
+      ),
+    ).toBe(true);
+    expect(artistScore("MØ", "MØ")).toBe(1);
+  });
+
+  it("does not treat albums that merely contain 'live' as live recordings", () => {
+    expect(
+      accepted(
+        "Doll Parts",
+        "Hole",
+        track("Doll Parts", "Hole", "Live Through This"),
+      ),
+    ).toBe(true);
+    expect(
+      accepted(
+        "Goldie",
+        "A$AP Rocky",
+        track("Goldie", "A$AP Rocky", "LONG.LIVE.A$AP (Deluxe Version)"),
+      ),
+    ).toBe(true);
+    expect(
+      accepted(
+        "Dreams",
+        "Fleetwood Mac",
+        track("Dreams", "Fleetwood Mac", "MTV Unplugged"),
+      ),
+    ).toBe(false);
+  });
+
+  it("matches variant words as whole words in the candidate title", () => {
+    expect(
+      accepted("Alive", "Pearl Jam", track("Alive (Live)", "Pearl Jam")),
+    ).toBe(false);
+  });
+
   it("applies the 0.3 penalty to the title score only", () => {
     const score = scoreMatch(
       { title: "Dreams", artist: "Fleetwood Mac" },
@@ -192,6 +242,15 @@ describe("pickBest", () => {
     const live = track("Dreams (Live)", "Fleetwood Mac", "Album", "live");
     const studio = track("Dreams", "Fleetwood Mac", "Rumours", "studio");
     expect(pickBest(candidate, [live, studio])?.appleSongId).toBe("studio");
+  });
+
+  it("prefers the studio take when the candidate title only contains 'live' inside a word", () => {
+    const live = track("Alive (Live)", "Pearl Jam", "Album", "live");
+    const studio = track("Alive", "Pearl Jam", "Ten", "studio");
+    expect(
+      pickBest({ title: "Alive", artist: "Pearl Jam" }, [live, studio])
+        ?.appleSongId,
+    ).toBe("studio");
   });
 
   it("keeps search order on ties", () => {

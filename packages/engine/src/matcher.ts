@@ -7,13 +7,19 @@ const ARTIST_THRESHOLD = 0.8;
 const VARIANT_PENALTY = 0.3;
 const VARIANT_WORDS =
   /\b(live|karaoke|cover|tribute|instrumental|made famous|originally performed)\b/g;
+// Album names only count as variants with a clear marker: "Live Through This"
+// and "LONG.LIVE.A$AP" are studio albums.
+const ALBUM_VARIANT =
+  /^live$|\blive (at|from|in|on)\b|[([]live\b|-\s*live\b|\bunplugged\b|\bkaraoke\b|\btribute\b|made famous|originally performed/;
+const ALBUM_VARIANT_WORD =
+  /\b(live|unplugged|karaoke|tribute|made famous|originally performed)\b/;
 const ARTIST_SEPARATORS =
   /\s*(?:,|&|\/|\bfeat\.?|\bft\.?|\bx\b|\bwith\b|\band\b)\s*/i;
 
 export function normalize(text: string): string {
   return text
     .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/\([^)]*\)|\[[^\]]*\]/g, " ")
     .replace(
@@ -22,7 +28,7 @@ export function normalize(text: string): string {
     )
     .replace(/\s(feat|ft)\.?\s.*$/, " ")
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/[^\p{L}\p{N} ]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -77,15 +83,28 @@ export function artistScore(a: string, b: string): number {
 
 export type MatchScore = { title: number; artist: number; accepted: boolean };
 
+const hasWord = (text: string, word: string) =>
+  new RegExp(`\\b${word}\\b`).test(text);
+
+function variantWords(track: CatalogTrack): string[] {
+  const words: string[] = [
+    ...(track.title.toLowerCase().match(VARIANT_WORDS) ?? []),
+  ];
+  const album = track.album.toLowerCase();
+  if (ALBUM_VARIANT.test(album)) {
+    const word = album.match(ALBUM_VARIANT_WORD)?.[0];
+    if (word) words.push(word);
+  }
+  return words;
+}
+
 export function scoreMatch(
   candidate: TrackKey,
   track: CatalogTrack,
 ): MatchScore {
   const wanted = candidate.title.toLowerCase();
-  const variantWords =
-    `${track.title} ${track.album}`.toLowerCase().match(VARIANT_WORDS) ?? [];
   // Penalize live/karaoke/cover/... versions unless the candidate asked for them.
-  const penalty = variantWords.some((word) => !wanted.includes(word))
+  const penalty = variantWords(track).some((word) => !hasWord(wanted, word))
     ? VARIANT_PENALTY
     : 0;
   const title = titleScore(candidate.title, track.title) - penalty;

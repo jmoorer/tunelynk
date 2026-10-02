@@ -15,8 +15,9 @@ export function buildUserMessage({
   count,
   exclude,
 }: CandidateRequest): string {
-  // The prompt must not be able to close its own wrapper.
-  const safe = prompt.replace(/<\/?request>/gi, "");
+  // Neutralize every angle bracket so no spelling or nesting of a tag in the
+  // prompt can close its wrapper.
+  const safe = prompt.replace(/</g, "‹").replace(/>/g, "›");
   const lines = [`<request>${safe}</request>`, "", `Propose ${count} songs.`];
   if (exclude.length > 0) {
     lines.push(
