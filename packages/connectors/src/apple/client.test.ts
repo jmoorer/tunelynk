@@ -95,6 +95,34 @@ describe("createAppleClient", () => {
     await expect(failing.client.get("/search")).rejects.toThrow("fetch failed");
   });
 
+  it("aborts a hung request after timeoutMs and retries it", async () => {
+    let calls = 0;
+    const fetch = vi.fn(async (_url: URL, init?: RequestInit) => {
+      calls++;
+      if (calls > 1) return json({ ok: 1 });
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(init.signal?.reason),
+        );
+      });
+    });
+    const sleeps: number[] = [];
+    const client = createAppleClient({
+      token: { get: () => "tok", invalidate: () => {} },
+      limiter: { schedule: (task) => task(), drain: () => {} },
+      storefront: "us",
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      random: () => 0.5,
+      timeoutMs: 20,
+    });
+    await expect(client.get("/search")).resolves.toEqual({ ok: 1 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sleeps).toEqual([125]);
+  });
+
   it("re-signs the token once on 401", async () => {
     const { client, fetch, token, sleeps } = setup([
       empty(401),

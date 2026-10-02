@@ -12,6 +12,11 @@ const IDS_CHUNK = 300;
 const TOP_SONGS_LIMIT = "20";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Cached arrays are shared across runs; callers get their own copies so a
+// caller that sorts, cuts, or edits tracks cannot corrupt the cache.
+const copyTracks = (tracks: CatalogTrack[]) =>
+  tracks.map((t) => ({ ...t, artistIds: [...t.artistIds] }));
+
 function chunk<T>(items: T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -29,10 +34,10 @@ export function appleCatalog(
     load: () => Promise<CatalogTrack[]>,
   ): Promise<CatalogTrack[]> {
     const hit = cache.get(key);
-    if (hit) return hit;
+    if (hit) return copyTracks(hit);
     const value = await load();
     cache.set(key, value);
-    return value;
+    return copyTracks(value);
   }
 
   async function songsBy(

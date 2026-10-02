@@ -5,6 +5,9 @@ const BASE_URL = "https://api.music.apple.com/v1";
 const MAX_RETRIES = 4;
 const BASE_DELAY_MS = 250;
 const MAX_DELAY_MS = 4000;
+// Node's fetch waits up to 300 s for headers; a hung request would hold a
+// limiter slot that long and stall every catalog call in the process.
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 export class AppleApiError extends Error {
   readonly status: number;
@@ -32,6 +35,7 @@ export type AppleClientOptions = {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  timeoutMs?: number;
 };
 
 export type AppleClient = {
@@ -48,6 +52,7 @@ export function createAppleClient({
   fetch: fetchImpl = fetch,
   sleep = defaultSleep,
   random = Math.random,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: AppleClientOptions): AppleClient {
   return {
     async get<T>(path: string, params: Record<string, string> = {}) {
@@ -64,6 +69,7 @@ export function createAppleClient({
           .schedule(() =>
             fetchImpl(url, {
               headers: { Authorization: `Bearer ${token.get()}` },
+              signal: AbortSignal.timeout(timeoutMs),
             }),
           )
           .catch((err: unknown) => err);

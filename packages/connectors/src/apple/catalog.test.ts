@@ -49,6 +49,22 @@ describe("appleCatalog.search", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
+  it("hands out copies so callers cannot corrupt the cache", async () => {
+    const { client, get } = fakeClient(() => search);
+    const catalog = appleCatalog(client);
+    const first = await catalog.search("Radiohead Weird Fishes");
+    const [track] = first;
+    if (!track) throw new Error("expected a track");
+    track.title = "mutated";
+    track.artistIds.push("x");
+    first.length = 0;
+    const second = await catalog.search("Radiohead Weird Fishes");
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(second).toHaveLength(2);
+    expect(second[0]?.title).toBe("Weird Fishes / Arpeggi");
+    expect(second[0]?.artistIds).toEqual([]);
+  });
+
   it("caches by normalized term and limit", async () => {
     const { client, get } = fakeClient(() => search);
     const catalog = appleCatalog(client);
