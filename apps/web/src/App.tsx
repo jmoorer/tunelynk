@@ -1,10 +1,19 @@
-import { HealthStatus } from "./HealthStatus";
+import { BrowserRouter, Route, Routes } from "react-router";
+import { Landing } from "./pages/Landing";
+import { NotFound } from "./pages/NotFound";
+import { RunView } from "./pages/RunView";
 
 export function App() {
   return (
-    <main className="mx-auto max-w-xl p-8">
-      <h1 className="mb-4 text-3xl font-bold">Tunelynk</h1>
-      <HealthStatus />
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route
+          path="/playlists/:playlistId/runs/:runId"
+          element={<RunView />}
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
