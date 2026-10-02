@@ -82,18 +82,19 @@ interface CatalogTrack {
   appleSongId: string;
   isrc?: string;
   title: string;
-  artists: string[];      // split from attributes.artistName
-  artistIds: string[];    // from relationships.artists
+  artistName: string;     // attributes.artistName, raw ("Mumford & Sons", "Calvin Harris & Dua Lipa")
+  artistIds: string[];    // relationships.artists; empty on search and top-songs results
   album: string;
   durationMs: number;
-  explicit: boolean;
-  artworkUrl: string;     // template resolved to 300x300
+  explicit: boolean;      // attributes.contentRating === "explicit"
+  artworkUrl?: string;    // template resolved to 300x300
   previewUrl?: string;    // attributes.previews[0].url
 }
 
 interface CatalogSource {
   search(query: string, opts?: { limit?: number }): Promise<CatalogTrack[]>;
   lookupByIsrc(isrcs: string[]): Promise<CatalogTrack[]>;   // ≤25 per call; chunks above that
+  lookupByIds(ids: string[]): Promise<CatalogTrack[]>;      // ≤300 per call; hydrates artistIds
   artistTopSongs(artistId: string): Promise<CatalogTrack[]>;
 }
 
@@ -120,10 +121,12 @@ interface LlmProvider {
 - **Developer token:** ES256 JWT (`iss = APPLE_TEAM_ID`, `kid = APPLE_KEY_ID`, 1 h expiry), signed with `node:crypto`. `APPLE_PRIVATE_KEY` accepts base64 of the `.p8` PEM, a bare base64 PKCS#8 body, or raw PEM, the same as the spike. Cached and re-signed after 50 minutes or on a 401.
 - **Limiter:** one instance per process. Token bucket at `APPLE_CATALOG_RPS` (8) refill, `APPLE_CATALOG_BURST` (10) capacity, at most `APPLE_CATALOG_CONCURRENCY` (4) requests in flight. A 429 empties the bucket so parallel callers back off together.
 - **Retry:** on 429 and 5xx, exponential backoff with full jitter, base 250 ms, cap 4 s, up to 4 retries. On 401, re-sign the token and retry once. Other 4xx responses throw immediately.
-- **Search:** `GET /v1/catalog/{sf}/search?types=songs&limit=5&term=…`, plus whatever relationship parameter returns artist ids. Slice A's live smoke confirms whether `include=artists` works on search; if not, the engine resolves artist ids with one `types=artists` search per plan artist (≤10 calls).
+- **Search:** `GET /v1/catalog/{sf}/search?types=songs&limit=5&term=…`. Verified 2026-10-01: search results carry no `relationships`, with or without `include=artists` / `relate=artists`, so `artistIds` is empty on search results.
+- **Songs by id:** `GET /v1/catalog/{sf}/songs?ids=a,b,…` in chunks of 300. These responses include `relationships.artists` by default, so the engine hydrates artist ids for all matched tracks with one call.
 - **ISRC lookup:** `GET /v1/catalog/{sf}/songs?filter[isrc]=a,b,…` in chunks of 25.
 - **Top songs:** `GET /v1/catalog/{sf}/artists/{id}/view/top-songs`.
-- **Cache:** in-memory LRU (500 entries, 24 h TTL) keyed by normalized query for search. Lookups and top songs are cached the same way.
+- **Cache:** in-memory LRU (500 entries, 24 h TTL) for search (keyed by limit + normalized query) and top songs (keyed by artist id). Batch lookups are not cached.
+- **Artist names stay raw.** `artistName` is not split in the connector because band names contain `&` ("Mumford & Sons"). The matcher splits and compares against both the full name and the parts.
 
 ## Engine
 
@@ -139,7 +142,7 @@ interface LlmProvider {
 
 - `normalize`: lowercase; NFKD and strip diacritics; remove `(feat. …)`, `[…]`, `- 2011 Remaster`, `(Remastered …)`, `(Radio Edit)` and similar suffixes; `&` → `and`; drop punctuation; collapse whitespace.
 - Title score: Dice coefficient on character bigrams of normalized titles.
-- Artist score: best Dice score between the candidate artist and each catalog artist, after splitting on `,`, `&`, `feat.`, `x`, `with`.
+- Artist score: best Dice score between the candidate artist and the catalog `artistName`, both as a whole and split on `,`, `&`, `feat.`, `x`, `with`.
 - Variant penalty: −0.3 when the catalog title or album contains live, karaoke, cover, tribute, instrumental, "made famous", or "originally performed" and the candidate title does not.
 - Accept when title ≥ 0.85 and artist ≥ 0.8 after the penalty. These are starting thresholds, tuned with the fixtures and the eval script. Among accepted results, take the highest combined score.
 
@@ -149,7 +152,7 @@ interface LlmProvider {
 2. `onStage("matching")`. Search every candidate in parallel; the connector's limiter throttles. A search that throws marks that candidate `error`, not the run.
 3. Dedupe by ISRC (falling back to `appleSongId`), then by normalized (title, primary artist) to catch re-releases. Drop tracks in `exclude`. Keep LLM order and cut to `length`.
 4. **Backfill** when short:
-   - Pick artists: `plan.artists` that resolved to an artist id via matched tracks' `artistIds`, ordered by match count.
+   - Pick artists: one `catalog.lookupByIds(matched song ids)` call hydrates `artistIds`. Keep artist ids whose track's `artistName` matches a `plan.artists` entry (matcher artist score ≥ 0.8), ordered by match count.
    - Add `artistTopSongs(id)` round-robin, at most 2 per artist, skipping duplicates and excludes, until the list is full or the pool runs out.
    - Spread backfill tracks evenly through the list. Tag each track `source: "llm" | "backfill"`.
 5. **50% rule:** fewer than `ceil(length / 2)` tracks throws `NotEnoughTracksError`.
@@ -171,15 +174,15 @@ generation_runs id, playlist_id → playlists, trigger ('manual'|'schedule'|'eve
                 status ('queued'|'running'|'draft'|'published'|'failed'|'expired'),
                 stage ('taste'|'llm'|'matching')?, error?, llm_model,
                 candidates jsonb, started_at?, finished_at?, created_at
-tracks          id, apple_song_id UNIQUE, isrc?, title, artists text[], album,
-                duration_ms, explicit, artwork_url, preview_url?
+tracks          id, apple_song_id UNIQUE, isrc?, title, artist_name, album,
+                duration_ms, explicit, artwork_url?, preview_url?
 run_tracks      run_id → generation_runs, position, track_id → tracks,
                 source ('llm'|'backfill'), removed bool = false    PK(run_id, position)
 llm_usage       id, user_id? → users, model, input_tokens, output_tokens, cost_micros bigint,
                 kind ('guest'|'user'|'scheduled'), created_at
 ```
 
-The spec's `familiarity` column on `run_tracks` waits for taste. `expires_at` on runs waits for the cleanup job (#6).
+The flow map's `artists text[]` on `tracks` becomes `artist_name text` because Apple returns one display string. The spec's `familiarity` column on `run_tracks` waits for taste. `expires_at` on runs waits for the cleanup job (#6).
 
 ## API
 
@@ -209,7 +212,7 @@ Returns `RunResponse`:
 ```ts
 { id, status, stage, error,
   playlist: { id, name, prompt },
-  tracks: [{ position, appleSongId, title, artists, album, artworkUrl, previewUrl, durationMs, explicit, source }],
+  tracks: [{ position, appleSongId, title, artistName, album, artworkUrl, previewUrl, durationMs, explicit, source }],
   unmatched: [{ title, artist }] }
 ```
 
@@ -266,8 +269,8 @@ On startup, `queued` or `running` runs created more than 5 minutes ago → `fail
 
 TDD within each slice.
 
-- **A (connector):** limiter with fake timers (burst, refill, max in flight, drain on 429); retry/backoff and 401 re-sign; `devToken` signs and verifies with a generated P-256 key; msw contract tests against recorded Apple JSON fixtures for search, ISRC lookup, and top songs; live smoke behind `APPLE_LIVE=1`, excluded from CI.
-- **B (engine):** matcher table fixtures (remaster, feat., live, karaoke, cover, multi-artist, diacritics); `generate()` with fake catalog and LLM (dedupe, exclude, cut, backfill and interleave, 50% rule, refusal, per-candidate search error, usage on error); adapter msw tests (request shape, structured-output parsing, retry, timeout); CLI and `scripts/eval-llm.ts` run by hand.
+- **A (connector):** limiter with fake timers (burst, refill, max in flight, drain on 429); retry/backoff and 401 re-sign; `devToken` signs and verifies with a generated P-256 key; contract tests against recorded Apple JSON fixtures (search, songs by id, top songs) through an injected `fetch`, not msw; live smoke behind `APPLE_LIVE=1`, excluded from CI.
+- **B (engine):** matcher table fixtures (remaster, feat., live, karaoke, cover, multi-artist, diacritics); `generate()` with fake catalog and LLM (dedupe, exclude, cut, backfill and interleave, 50% rule, refusal, per-candidate search error, usage on error); adapter tests with an injected `fetch` (request shape, structured-output parsing, retry, timeout); CLI and `scripts/eval-llm.ts` run by hand.
 - **C (API):** unit tests for env parsing, cookie sign/verify, budget math. Postgres integration tests with a fake engine: create → poll → draft, failure path, 409, budget 503, cookie reuse, `GET` does not create users, boot recovery.
 - **D (web):** Vitest + Testing Library for landing submit and error states, run view per status with mocked fetch, single-player behavior.
 - **Done when:** a local run with real Apple and LLM keys produces a playable preview in under a minute; then the same on Dokploy after its env vars are added (`docs/deploy.md` updated).
@@ -276,7 +279,7 @@ TDD within each slice.
 
 | Slice | PR delivers | Checkpoint |
 |---|---|---|
-| A | `packages/connectors` (Apple) | Live smoke returns real songs; confirms the artist-id parameter |
+| A | `packages/connectors` (Apple) | Live smoke returns real songs and artist ids via `lookupByIds` |
 | B | `packages/engine` + CLI + eval script | `pnpm --filter @tunelynk/engine generate "90s road trip"` prints 20 real tracks |
 | C | DB schema, env, guest cookie, runs API, executor, budget, boot recovery | `curl` create → poll → tracks |
 | D | Landing, run view, preview player, deploy env docs | Issue #10 done-when, locally and on Dokploy |
