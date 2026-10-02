@@ -95,6 +95,19 @@ describe("createAppleClient", () => {
     await expect(failing.client.get("/search")).rejects.toThrow("fetch failed");
   });
 
+  it("accepts responses that are not instances of the global Response", async () => {
+    // @hono/node-server replaces globalThis.Response, so fetch's responses fail
+    // an `instanceof Response` check inside the API server.
+    const foreign = {
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: 1 }),
+    } as unknown as Response;
+    const { client, fetch } = setup([foreign]);
+    await expect(client.get("/search")).resolves.toEqual({ ok: 1 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("aborts a hung request after timeoutMs and retries it", async () => {
     let calls = 0;
     const fetch = vi.fn(async (_url: URL, init?: RequestInit) => {
