@@ -1,10 +1,10 @@
 import { migrateDb } from "@tunelynk/db";
-import { loadEnv } from "./env";
+import { loadMigrateEnv } from "./env";
 import { resolveRuntimePaths } from "./paths";
 
 // Runs before the server in the deploy start command; a non-zero exit
 // stops the server from starting, so the deploy fails and the old container stays.
-const env = loadEnv();
+const env = loadMigrateEnv();
 const { migrationsDir } = resolveRuntimePaths(import.meta.url);
 
 try {
