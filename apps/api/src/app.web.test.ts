@@ -4,6 +4,9 @@ import { join } from "node:path";
 import type { Db } from "@tunelynk/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "./app";
+import type { RunsDeps } from "./runs/routes";
+
+const runs = {} as RunsDeps; // health/static tests never hit /api/runs
 
 const fakeDb = { execute: async () => [] } as unknown as Db;
 const INDEX = "<!doctype html><title>tunelynk</title>";
@@ -24,7 +27,7 @@ beforeAll(() => {
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 describe("createApp with webDir", () => {
-  const app = () => createApp({ db: fakeDb, webDir });
+  const app = () => createApp({ runs, db: fakeDb, webDir });
 
   it("serves index.html at /", async () => {
     const res = await app().request("/");
@@ -98,7 +101,7 @@ describe("createApp with webDir", () => {
 
 describe("createApp without webDir", () => {
   it("returns JSON 404 for /", async () => {
-    const res = await createApp({ db: fakeDb }).request("/");
+    const res = await createApp({ runs, db: fakeDb }).request("/");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not Found" });
   });
