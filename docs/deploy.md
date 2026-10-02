@@ -30,10 +30,18 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    ```
    DATABASE_URL=<internal Postgres URL from step 1>
    PORT=3000
+   APPLE_TEAM_ID=<Apple developer team id>
+   APPLE_KEY_ID=<MusicKit key id>
+   APPLE_PRIVATE_KEY=<base64 of the MusicKit .p8 file>
+   SESSION_SECRET=<32+ random chars: openssl rand -base64 48>
+   LLM_PROVIDER=anthropic
+   ANTHROPIC_API_KEY=<key with credit>
    ```
-   No `NODE_ENV` is needed; the app does not read it. (The Dockerfile forces
-   `NODE_ENV=development` for `pnpm install`, so the build is safe even if
-   one is set.)
+   Optional, with defaults: `LLM_MODEL_GUEST` (`claude-haiku-4-5`; `gpt-4.1-mini` for openai), `LLM_MAX_TOKENS` (2000), `LLM_DAILY_BUDGET_USD` (2), `APPLE_STOREFRONT` (`us`), `APPLE_CATALOG_RPS` / `_BURST` / `_CONCURRENCY` (8 / 10 / 4). Leave `COOKIE_SECURE` unset; it defaults to `true`, which is right behind HTTPS.
+
+   **Set these before a deploy that includes the runs API.** The server validates them at boot and exits if any are missing. The new container then never becomes healthy and the old one keeps serving, but the deploy fails. `migrate.js` needs only `DATABASE_URL`.
+
+   No `NODE_ENV` is needed; the app does not read it. (The Dockerfile forces `NODE_ENV=development` for `pnpm install`, so the build is safe even if one is set.)
 4. **Domain.** Host `tunelynk.bytmoor.com`, container port `3000`, HTTPS on,
    certificate Let's Encrypt. In DNS, add an A record for `tunelynk.bytmoor.com`
    pointing at the Dokploy server (skip if a `*.bytmoor.com` wildcard already does).
@@ -48,7 +56,7 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    }
    ```
    (Durations are nanoseconds.) This uses `node` because the `node:22-slim` image has no `curl`.
-6. Deploy. Check that https://tunelynk.bytmoor.com shows `API: up / DB: up`.
+6. Deploy. Check that https://tunelynk.bytmoor.com/api/health returns `{"ok":true,"db":"up"}`, then generate a playlist from the landing page.
 
 ## Operations
 
@@ -60,4 +68,6 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
   extension must include `CREATE EXTENSION IF NOT EXISTS …` itself.
 - **Replicas:** keep this at 1. Migrations run on container start and are not
   coordinated across instances.
-- **Local image check:** `docker build -t tunelynk . && docker run --rm -p 3100:3000 -e DATABASE_URL=postgres://tunelynk:tunelynk@host.docker.internal:5432/tunelynk tunelynk`
+- **LLM spend:** every run records its cost in `llm_usage`. New runs are refused with `503 budget_exceeded` once today's (UTC) spend plus a reservation for in-flight runs reaches `LLM_DAILY_BUDGET_USD`.
+- **Stuck runs:** a sweeper fails `queued`/`running` runs older than 3 minutes at boot and every minute, so a redeploy mid-run never strands a guest.
+- **Local image check:** `docker build -t tunelynk . && docker run --rm -p 3100:3000 --env-file .env -e DATABASE_URL=postgres://tunelynk:tunelynk@host.docker.internal:5432/tunelynk -e PORT=3000 tunelynk` (the server needs the full env from `.env`, not just `DATABASE_URL`)
