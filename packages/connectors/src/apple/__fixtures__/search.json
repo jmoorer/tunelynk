@@ -1,0 +1,46 @@
+{
+  "results": {
+    "songs": {
+      "data": [
+        {
+          "id": "1109715168",
+          "type": "songs",
+          "attributes": {
+            "albumName": "In Rainbows",
+            "artistName": "Radiohead",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/dd/50/c7/dd50c790-99ac-d3d0-5ab8-e3891fb8fd52/634904032463.png/{w}x{h}bb.jpg"
+            },
+            "durationInMillis": 318187,
+            "isrc": "GBSTK0700004",
+            "name": "Weird Fishes / Arpeggi",
+            "previews": [
+              {
+                "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3a/12/eb/3a12ebaf-89c1-1ac9-6821-3a1de510ef51/mzaf_14543910941982290973.plus.aac.p.m4a"
+              }
+            ]
+          }
+        },
+        {
+          "id": "813858377",
+          "type": "songs",
+          "attributes": {
+            "albumName": "Der Prinz",
+            "artistName": "MG3: Montreal Guitare Trio",
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music6/v4/fd/ad/56/fdad5603-7cba-938e-e6b4-a1b13809ada3/774204876821.tif/{w}x{h}bb.jpg"
+            },
+            "durationInMillis": 283754,
+            "isrc": "CA2Z61400010",
+            "name": "Weird Fishes",
+            "previews": [
+              {
+                "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/49/27/7a/49277aa2-424c-22ea-f35a-98ed48f7c47d/mzaf_13790328913826371154.plus.aac.p.m4a"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
