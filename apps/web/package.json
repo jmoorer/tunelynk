@@ -15,7 +15,8 @@
     "@tunelynk/shared": "workspace:*",
     "hono": "^4.13.10",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "react-router": "^7.18.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
