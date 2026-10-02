@@ -1,0 +1,29 @@
+{
+  "name": "@tunelynk/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "generate": "tsx --env-file-if-exists=../../.env src/bin/generate.ts",
+    "eval": "tsx --env-file-if-exists=../../.env src/bin/eval.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@tunelynk/connectors": "workspace:*",
+    "openai": "^7.27.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tunelynk/config": "workspace:*",
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}
