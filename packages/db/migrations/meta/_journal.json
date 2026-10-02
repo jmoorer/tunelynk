@@ -8,6 +8,20 @@
       "when": 1790710854283,
       "tag": "0000_lean_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790955018557,
+      "tag": "0001_drop_app_meta",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790955027239,
+      "tag": "0002_domain_schema",
+      "breakpoints": true
     }
   ]
 }

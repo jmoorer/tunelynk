@@ -4,11 +4,13 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Db, ping } from "@tunelynk/db";
 import type { HealthResponse } from "@tunelynk/shared";
 import { Hono } from "hono";
+import { type RunsDeps, runsRoutes } from "./runs/routes";
 
 export type AppDeps = {
   db: Db;
   // Built web SPA (must contain index.html). Unset in dev and tests.
   webDir?: string;
+  runs: RunsDeps;
 };
 
 const isApiPath = (path: string) => path === "/api" || path.startsWith("/api/");
@@ -22,16 +24,18 @@ const cacheControl = (path: string) =>
     ? "public, max-age=31536000, immutable"
     : "no-cache";
 
-export function createApp({ db, webDir }: AppDeps) {
-  const api = new Hono().get("/health", async (c) => {
-    let dbStatus: HealthResponse["db"] = "up";
-    try {
-      await ping(db);
-    } catch {
-      dbStatus = "down";
-    }
-    return c.json({ ok: true, db: dbStatus } satisfies HealthResponse);
-  });
+export function createApp({ db, webDir, runs }: AppDeps) {
+  const api = new Hono()
+    .get("/health", async (c) => {
+      let dbStatus: HealthResponse["db"] = "up";
+      try {
+        await ping(db);
+      } catch {
+        dbStatus = "down";
+      }
+      return c.json({ ok: true, db: dbStatus } satisfies HealthResponse);
+    })
+    .route("/runs", runsRoutes(runs));
 
   const app = new Hono().route("/api", api);
 

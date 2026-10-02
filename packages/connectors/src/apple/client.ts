@@ -65,30 +65,35 @@ export function createAppleClient({
       let resigned = false;
       for (;;) {
         // Each attempt, retries included, spends a limiter token.
-        const result = await limiter
-          .schedule(() =>
+        // A rejected fetch is a network error. Don't test `instanceof Response`:
+        // @hono/node-server replaces globalThis.Response, so real responses
+        // would fail the check inside the API server.
+        let result: Response;
+        try {
+          result = await limiter.schedule(() =>
             fetchImpl(url, {
               headers: { Authorization: `Bearer ${token.get()}` },
               signal: AbortSignal.timeout(timeoutMs),
             }),
-          )
-          .catch((err: unknown) => err);
-
-        if (result instanceof Response) {
-          if (result.ok) return (await result.json()) as T;
-          if (result.status === 401 && !resigned) {
-            resigned = true;
-            token.invalidate();
-            continue;
-          }
-          const retryable = result.status === 429 || result.status >= 500;
-          if (!retryable || retries >= MAX_RETRIES) {
-            throw new AppleApiError(result.status, path);
-          }
-          if (result.status === 429) limiter.drain();
-        } else if (retries >= MAX_RETRIES) {
-          throw result;
+          );
+        } catch (err) {
+          if (retries >= MAX_RETRIES) throw err;
+          await sleep(backoffDelay(retries, random));
+          retries++;
+          continue;
         }
+
+        if (result.ok) return (await result.json()) as T;
+        if (result.status === 401 && !resigned) {
+          resigned = true;
+          token.invalidate();
+          continue;
+        }
+        const retryable = result.status === 429 || result.status >= 500;
+        if (!retryable || retries >= MAX_RETRIES) {
+          throw new AppleApiError(result.status, path);
+        }
+        if (result.status === 429) limiter.drain();
 
         await sleep(backoffDelay(retries, random));
         retries++;

@@ -17,15 +17,21 @@
     "test:integration": "vitest run integration"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@hono/node-server": "^2.1.1",
+    "@tunelynk/connectors": "workspace:*",
     "@tunelynk/db": "workspace:*",
+    "@tunelynk/engine": "workspace:*",
     "@tunelynk/shared": "workspace:*",
+    "drizzle-orm": "^0.45.3",
     "hono": "^4.13.10",
+    "openai": "~7.25.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@tunelynk/config": "workspace:*",
     "@types/node": "^26.6.3",
+    "postgres": "^3.4.9",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
