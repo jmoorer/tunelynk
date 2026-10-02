@@ -39,9 +39,21 @@ describe.skipIf(!url)("migrateDb against a fresh database", () => {
       const [migrations] = await check<{ n: number }[]>`
         select count(*)::int as n from drizzle.__drizzle_migrations`;
       expect(migrations?.n).toBe(journal.entries.length);
-      const [table] = await check<{ t: string | null }[]>`
-        select to_regclass('public.app_meta')::text as t`;
-      expect(table?.t).toBe("app_meta");
+      const tables = await check<{ t: string | null }[]>`
+        select to_regclass(name)::text as t from unnest(array[
+          'public.users', 'public.playlists', 'public.generation_runs',
+          'public.tracks', 'public.run_tracks', 'public.llm_usage',
+          'public.app_meta'
+        ]) as name`;
+      expect(tables.map((r) => r.t)).toEqual([
+        "users",
+        "playlists",
+        "generation_runs",
+        "tracks",
+        "run_tracks",
+        "llm_usage",
+        null,
+      ]);
     } finally {
       await check.end();
     }
