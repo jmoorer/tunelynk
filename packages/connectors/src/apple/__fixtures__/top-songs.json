@@ -1,0 +1,43 @@
+{
+  "data": [
+    {
+      "id": "1097862231",
+      "type": "songs",
+      "attributes": {
+        "albumName": "Pablo Honey",
+        "artistName": "Radiohead",
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/78/a4/ec/78a4ec7b-c6d6-c9c8-441b-660486e56a89/634904077969.png/{w}x{h}bb.jpg"
+        },
+        "durationInMillis": 238640,
+        "isrc": "GBAYE9200070",
+        "name": "Creep",
+        "previews": [
+          {
+            "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/91/07/a1/9107a13f-9179-34a9-89d6-a9569777195c/mzaf_9360083878255871917.plus.aac.p.m4a"
+          }
+        ],
+        "contentRating": "explicit"
+      }
+    },
+    {
+      "id": "1097861834",
+      "type": "songs",
+      "attributes": {
+        "albumName": "OK Computer",
+        "artistName": "Radiohead",
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/07/60/ba/0760ba0f-148c-b18f-d0ff-169ee96f3af5/634904078164.png/{w}x{h}bb.jpg"
+        },
+        "durationInMillis": 299560,
+        "isrc": "GBAYE9701374",
+        "name": "Let Down",
+        "previews": [
+          {
+            "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/cd/65/58/cd6558df-2ba2-6f8e-25a0-d2db94494f74/mzaf_5583409847288875892.plus.aac.p.m4a"
+          }
+        ]
+      }
+    }
+  ]
+}

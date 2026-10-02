@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "1109715168",
+      "type": "songs",
+      "attributes": {
+        "albumName": "In Rainbows",
+        "artistName": "Radiohead",
+        "artwork": {
+          "url": "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/dd/50/c7/dd50c790-99ac-d3d0-5ab8-e3891fb8fd52/634904032463.png/{w}x{h}bb.jpg"
+        },
+        "durationInMillis": 318187,
+        "isrc": "GBSTK0700004",
+        "name": "Weird Fishes / Arpeggi",
+        "previews": [
+          {
+            "url": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/3a/12/eb/3a12ebaf-89c1-1ac9-6821-3a1de510ef51/mzaf_14543910941982290973.plus.aac.p.m4a"
+          }
+        ]
+      },
+      "relationships": {
+        "artists": {
+          "data": [
+            {
+              "id": "657515",
+              "type": "artists"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
