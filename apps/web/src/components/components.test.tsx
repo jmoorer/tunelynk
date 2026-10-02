@@ -5,14 +5,19 @@ import type { PreviewPlayer } from "../hooks/usePreviewPlayer";
 import { makeTrack } from "../test/fixtures";
 import { ErrorBanner } from "./ErrorBanner";
 import { NowPlayingBar } from "./NowPlayingBar";
+import { PlaybackNotice } from "./PlaybackNotice";
 import { TopBar } from "./TopBar";
 import { TrackGrid } from "./TrackGrid";
 
 const player = (overrides: Partial<PreviewPlayer> = {}): PreviewPlayer => ({
   current: null,
+  status: "idle",
   progress: 0,
+  failed: new Set(),
+  issue: null,
   toggle: vi.fn(),
   stop: vi.fn(),
+  dismissIssue: vi.fn(),
   ...overrides,
 });
 
@@ -95,12 +100,91 @@ describe("TrackGrid", () => {
   });
 });
 
+describe("TrackGrid playback states", () => {
+  it("shows a spinner on the loading tile", () => {
+    const tracks = [makeTrack(1)];
+    render(
+      <TrackGrid
+        tracks={tracks}
+        player={player({ current: tracks[0] ?? null, status: "loading" })}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Pause Song 1 by Artist 1" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("tile-spinner")).toBeInTheDocument();
+  });
+
+  it("marks failed tracks as unavailable and disables them", () => {
+    render(
+      <TrackGrid
+        tracks={[makeTrack(1)]}
+        player={player({ failed: new Set(["song-1"]) })}
+      />,
+    );
+    const tile = screen.getByRole("button", {
+      name: "Song 1 by Artist 1, preview unavailable",
+    });
+    expect(tile).toBeDisabled();
+    expect(tile).toHaveTextContent("Preview unavailable");
+  });
+});
+
+describe("PlaybackNotice", () => {
+  it.each([
+    [
+      "unavailable",
+      "Couldn't play that preview. A browser extension or privacy setting may be blocking audio from Apple.",
+    ],
+    [
+      "autoplay-blocked",
+      "Your browser blocked playback. Tap the track again to play.",
+    ],
+  ] as const)("explains %s and can be dismissed", (issue, message) => {
+    const p = player({ issue });
+    render(<PlaybackNotice player={p} />);
+    expect(screen.getByRole("status")).toHaveTextContent(message);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(p.dismissIssue).toHaveBeenCalled();
+  });
+
+  it("renders nothing without an issue", () => {
+    const { container } = render(<PlaybackNotice player={player()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
 describe("NowPlayingBar", () => {
   it("renders nothing when idle", () => {
     const { container } = render(
       <NowPlayingBar player={player()} tracks={[makeTrack(1)]} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("says Loading until the clip starts", () => {
+    const tracks = [makeTrack(1)];
+    render(
+      <NowPlayingBar
+        player={player({ current: tracks[0] ?? null, status: "loading" })}
+        tracks={tracks}
+      />,
+    );
+    expect(
+      screen.getByRole("region", { name: "Now playing" }),
+    ).toHaveTextContent("Loading…");
+  });
+
+  it("skips failed tracks", () => {
+    const tracks = [makeTrack(1), makeTrack(2), makeTrack(3)];
+    const p = player({
+      current: tracks[0] ?? null,
+      status: "playing",
+      failed: new Set(["song-2"]),
+    });
+    render(<NowPlayingBar player={p} tracks={tracks} />);
+    fireEvent.click(screen.getByRole("button", { name: "Next track" }));
+    expect(p.toggle).toHaveBeenCalledWith(tracks[2]);
   });
 
   it("pauses and skips to the next playable track", () => {

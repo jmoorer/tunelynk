@@ -77,6 +77,31 @@ describe("RunView", () => {
     expect(screen.queryByRole("region", { name: "Now playing" })).toBe(null);
   });
 
+  it("explains a preview that can't play and marks its tile", async () => {
+    stubFetch(() => Response.json(makeRun()));
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockRejectedValue(
+      new DOMException("no supported source", "NotSupportedError"),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    renderAt(runUrl());
+    await flush();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Play Song 1 by Artist 1" }),
+    );
+    await flush();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Couldn't play that preview.",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Song 1 by Artist 1, preview unavailable",
+      }),
+    ).toBeDisabled();
+    expect(screen.queryByRole("region", { name: "Now playing" })).toBe(null);
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBe(null);
+  });
+
   it("stops the clip when leaving the run page", async () => {
     stubFetch(() => Response.json(makeRun()));
     const pause = vi.spyOn(window.HTMLMediaElement.prototype, "pause");

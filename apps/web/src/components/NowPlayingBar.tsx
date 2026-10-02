@@ -10,7 +10,9 @@ export function NowPlayingBar({
 }) {
   const track = player.current;
   if (!track) return null;
-  const playable = tracks.filter((t) => t.previewUrl);
+  const playable = tracks.filter(
+    (t) => t.previewUrl && !player.failed.has(t.appleSongId),
+  );
   const index = playable.findIndex((t) => t.appleSongId === track.appleSongId);
   const next = playable[(index + 1) % playable.length];
 
@@ -25,7 +27,8 @@ export function NowPlayingBar({
       <div className="min-w-0 flex-1">
         <p className="truncate font-semibold">{track.title}</p>
         <p className="truncate text-sm text-white/50">
-          {track.artistName} · 30s preview
+          {track.artistName} ·{" "}
+          {player.status === "loading" ? "Loading…" : "30s preview"}
         </p>
         <div className="mt-1.5 h-1 rounded bg-white/10">
           <div

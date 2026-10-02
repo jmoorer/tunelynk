@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useParams } from "react-router";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { NowPlayingBar } from "../components/NowPlayingBar";
+import { PlaybackNotice } from "../components/PlaybackNotice";
 import { Shell } from "../components/Shell";
 import { TopBar } from "../components/TopBar";
 import { TrackGrid } from "../components/TrackGrid";
@@ -119,6 +120,7 @@ export function RunView() {
           </p>
         )}
       </section>
+      <PlaybackNotice player={player} />
       <NowPlayingBar player={player} tracks={run?.tracks ?? []} />
     </Shell>
   );

@@ -35,6 +35,8 @@ export function TrackGrid({
                 track={track}
                 index={i}
                 playing={playing}
+                loading={playing && player.status === "loading"}
+                unavailable={player.failed.has(track.appleSongId)}
                 progress={playing ? player.progress : 0}
                 onToggle={player.toggle}
               />
