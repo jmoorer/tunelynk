@@ -4,6 +4,7 @@ import type { RunResponse } from "@tunelynk/shared";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
+import { createSessionRepo } from "../auth/sessions";
 import { createTestDatabase } from "../test/db";
 import { createRunExecutor, type Engine, type RunJob } from "./executor";
 import { RUN_ERRORS } from "./messages";
@@ -75,6 +76,11 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     const build = () =>
       createApp({
         db: handle.db,
+        auth: {
+          sessions: createSessionRepo(handle.db),
+          sessionSecret: SECRET,
+          secureCookies: false,
+        },
         runs: {
           repo,
           executor: {
@@ -267,7 +273,10 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     await Promise.all(pending);
     const second = await post({ prompt: "two" }, cookie);
     expect(second.status).toBe(202);
-    expect(second.headers.get("set-cookie")).toBe(null);
+    // The middleware upgrades tl_guest to tl_session; no new guest cookie.
+    expect(
+      second.headers.getSetCookie().some((c) => /^tl_guest=[^;]/.test(c)),
+    ).toBe(false);
     await Promise.all(pending);
     expect(await count(users)).toBe(1);
   });
