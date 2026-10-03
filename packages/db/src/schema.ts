@@ -10,6 +10,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -40,6 +41,7 @@ export const runStatus = pgEnum("run_status", [
 export const runStage = pgEnum("run_stage", ["taste", "llm", "matching"]);
 export const trackSource = pgEnum("track_source", ["llm", "backfill"]);
 export const usageKind = pgEnum("usage_kind", ["guest", "user", "scheduled"]);
+export const authMethod = pgEnum("auth_method", ["email", "apple"]);
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -151,4 +153,58 @@ export const llmUsage = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("llm_usage_created_at_idx").on(t.createdAt)],
+);
+
+// Login identity (not a music connection). email: lowercased address;
+// apple: the id_token `sub`. Identities are never linked across methods.
+export const authIdentities = pgTable(
+  "auth_identities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    method: authMethod("method").notNull(),
+    subject: text("subject").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("auth_identities_method_subject_key").on(t.method, t.subject),
+    index("auth_identities_user_id_idx").on(t.userId),
+  ],
+);
+
+// Magic-link tokens. Only the SHA-256 of the token is stored.
+export const loginTokens = pgTable(
+  "login_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    email: text("email").notNull(),
+    returnTo: text("return_to"),
+    // The guest that requested the link, claimed on verify.
+    guestUserId: uuid("guest_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("login_tokens_email_created_at_idx").on(t.email, t.createdAt)],
+);
+
+// Server-side sessions for guests and users. The cookie holds a random token;
+// only its SHA-256 is stored.
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull().unique(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("sessions_user_id_idx").on(t.userId)],
 );
