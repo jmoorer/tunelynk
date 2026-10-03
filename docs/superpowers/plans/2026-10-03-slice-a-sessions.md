@@ -1423,7 +1423,7 @@ In `apps/api/src/app.test.ts` and `apps/api/src/app.web.test.ts`, next to `const
 const auth = {} as AuthDeps;
 ```
 
-with `import type { AuthDeps } from "./auth/middleware";`. Pass `auth` in every `createApp({ ... })` call (`createApp({ runs, auth, db: … })`). In `apps/api/src/app.integration.test.ts`, pass `auth: { sessions: createSessionRepo(db), sessionSecret: "x".repeat(32), secureCookies: false }` (import `createSessionRepo` from `./auth/sessions`). In `apps/api/src/runs/routes.integration.test.ts`, pass `auth: { sessions: createSessionRepo(handle.db), sessionSecret: SECRET, secureCookies: false }` in `build()`; Task 6 rewrites that file further.
+with `import type { AuthDeps } from "./auth/middleware";`. Pass `auth` in every `createApp({ ... })` call (`createApp({ runs, auth, db: … })`). Do the same in `apps/api/src/app.integration.test.ts` (its health request sends no cookies). In `apps/api/src/runs/routes.integration.test.ts`, pass `auth: { sessions: createSessionRepo(handle.db), sessionSecret: SECRET, secureCookies: false }` in `build()`; Task 6 rewrites that file further.
 
 In `apps/api/src/index.ts`:
 
