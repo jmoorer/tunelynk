@@ -71,7 +71,10 @@ export function createRunExecutor({
             );
         },
       );
-      await recordUsage(job, result.usage);
+      // A lost usage row must not fail a playlist that was generated.
+      await recordUsage(job, result.usage).catch((err) =>
+        logger.error(`run ${job.runId}: usage write failed`, err),
+      );
       await repo.completeRun(job.runId, result);
     } catch (err) {
       logger.error(`run ${job.runId} failed`, err);

@@ -6,7 +6,7 @@ import {
   sessions,
   users,
 } from "@tunelynk/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { insertSession, type Tx } from "./sessions";
 
 export type Identity = { method: "email" | "apple"; subject: string };
@@ -74,6 +74,12 @@ export async function finishSignIn(
         ),
       ),
     ];
+    // createRun holds the same per-user lock while it inserts, so a claim
+    // never misses (and cascade-deletes) a playlist that is mid-insert.
+    // Sorted so two sign-ins can't take the locks in opposite orders.
+    for (const id of [userId, ...candidates].sort()) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${id}))`);
+    }
     if (candidates.length > 0) {
       const guests = (
         await tx

@@ -152,6 +152,38 @@ describe.skipIf(!process.env.DATABASE_URL)("finishSignIn", () => {
     });
   });
 
+  it("waits for a guest's in-flight run creation before claiming", async () => {
+    const guest = await repo.createGuestSession();
+    let commit: () => void = () => {};
+    const gate = new Promise<void>((r) => (commit = r));
+    let ready: () => void = () => {};
+    const inserted = new Promise<void>((r) => (ready = r));
+    let playlistId = "";
+    // Mimics createRun: per-user advisory lock, then an uncommitted insert.
+    const creating = handle.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${guest.userId}))`,
+      );
+      const [row] = await tx
+        .insert(playlists)
+        .values({ userId: guest.userId, name: "p", prompt: "p", length: 20 })
+        .returning({ id: playlists.id });
+      playlistId = row?.id ?? "";
+      ready();
+      await gate;
+    });
+    await inserted;
+    const signIn = finishSignIn(handle.db, {
+      identity: email,
+      guestUserIds: [guest.userId],
+    });
+    await new Promise((r) => setTimeout(r, 150));
+    commit();
+    await creating;
+    const { userId } = await signIn;
+    expect(await ownerOf(playlistId)).toBe(userId);
+  });
+
   it("resolves two simultaneous first sign-ins to one user", async () => {
     const results = await Promise.all([
       finishSignIn(handle.db, { identity: email, guestUserIds: [] }),

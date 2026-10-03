@@ -1,7 +1,7 @@
 import { llmUsage, playlists, users } from "@tunelynk/db";
 import { type GenerateResult, RefusalError } from "@tunelynk/engine";
 import type { RunResponse } from "@tunelynk/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { generateSignedCookie } from "hono/cookie";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
@@ -383,5 +383,53 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
       .select({ u: llmUsage.userId, k: llmUsage.kind })
       .from(llmUsage);
     expect(spent).toEqual({ u: account.userId, k: "guest" });
+  });
+
+  it("rejects a non-JSON content type with 415 and writes nothing", async () => {
+    const res = await app.request("/api/runs", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ prompt: "p" }),
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: "json_required" });
+    expect(await count(users)).toBe(0);
+  });
+
+  it("returns 401 session_expired when the user vanishes before the run is created", async () => {
+    const repo = createRunRepo(handle.db);
+    const racing = createApp({
+      db: handle.db,
+      auth: {
+        sessions: createSessionRepo(handle.db),
+        sessionSecret: SECRET,
+        secureCookies: false,
+      },
+      runs: {
+        repo: {
+          ...repo,
+          // A claim commits between the middleware and createRun.
+          createRun: async (args) => {
+            await handle.db.delete(users).where(eq(users.id, args.userId));
+            return repo.createRun(args);
+          },
+        },
+        executor: { start: async () => {} },
+        dailyBudgetMicros: 2_000_000,
+        reservePerRunMicros: 0,
+        model: "claude-haiku-4-5",
+      },
+    });
+    const guest = await createSessionRepo(handle.db).createGuestSession();
+    const res = await racing.request("/api/runs", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `tl_session=${guest.token}`,
+      },
+      body: JSON.stringify({ prompt: "p" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "session_expired" });
   });
 });

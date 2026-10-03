@@ -6,6 +6,7 @@ import {
   type RunCandidate,
   runTracks,
   tracks,
+  users,
 } from "@tunelynk/db";
 import type { GeneratedTrack, LlmUsage, Stage } from "@tunelynk/engine";
 import type { RunResponse } from "@tunelynk/shared";
@@ -19,6 +20,23 @@ export type CompletedRun = {
   name: string;
   tracks: GeneratedTrack[];
   candidates: RunCandidate[];
+};
+
+// The user was deleted (claimed by a sign-in) after the request resolved it.
+export class UserGoneError extends Error {
+  constructor(userId: string) {
+    super(`User ${userId} no longer exists`);
+    this.name = "UserGoneError";
+  }
+}
+
+const FOREIGN_KEY_VIOLATION = "23503";
+const isForeignKeyViolation = (err: unknown): boolean => {
+  const { code, cause } = (err ?? {}) as { code?: unknown; cause?: unknown };
+  return (
+    code === FOREIGN_KEY_VIOLATION ||
+    (cause !== undefined && isForeignKeyViolation(cause))
+  );
 };
 
 export function createRunRepo(db: Db) {
@@ -64,6 +82,14 @@ export function createRunRepo(db: Db) {
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtext(${args.userId}))`,
         );
+        // finishSignIn takes the same lock before claiming a guest, so the
+        // user is either still here (and stays until commit) or already gone.
+        const [owner] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, args.userId))
+          .for("key share");
+        if (!owner) throw new UserGoneError(args.userId);
         const [active] = await tx
           .select({
             runId: generationRuns.id,
@@ -226,16 +252,24 @@ export function createRunRepo(db: Db) {
       costMicros: number;
       kind: "guest" | "user" | "scheduled";
     }): Promise<void> {
-      await db.insert(llmUsage).values({
-        userId: sql`(select ${playlists.userId} from ${generationRuns}
-          join ${playlists} on ${playlists.id} = ${generationRuns.playlistId}
-          where ${generationRuns.id} = ${args.runId})`,
-        model: args.usage.model,
-        inputTokens: args.usage.inputTokens,
-        outputTokens: args.usage.outputTokens,
-        costMicros: args.costMicros,
-        kind: args.kind,
-      });
+      const insert = () =>
+        db.insert(llmUsage).values({
+          userId: sql`(select ${playlists.userId} from ${generationRuns}
+            join ${playlists} on ${playlists.id} = ${generationRuns.playlistId}
+            where ${generationRuns.id} = ${args.runId})`,
+          model: args.usage.model,
+          inputTokens: args.usage.inputTokens,
+          outputTokens: args.usage.outputTokens,
+          costMicros: args.costMicros,
+          kind: args.kind,
+        });
+      try {
+        await insert();
+      } catch (err) {
+        // A claim deleted the owner we read; the retry reads the new owner.
+        if (!isForeignKeyViolation(err)) throw err;
+        await insert();
+      }
     },
 
     async getRun(runId: string): Promise<RunResponse | undefined> {

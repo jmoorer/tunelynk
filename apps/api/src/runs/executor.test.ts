@@ -135,6 +135,21 @@ describe("createRunExecutor", () => {
     );
   });
 
+  it("completes the run even when recording usage fails", async () => {
+    const repo = fakeRepo({
+      recordUsage: vi.fn(async () => Promise.reject(new Error("db blip"))),
+    });
+    const logger = quietLogger();
+    await createRunExecutor({
+      repo,
+      engine: async () => result,
+      logger,
+    }).start(job);
+    expect(repo.completeRun).toHaveBeenCalledWith("run-1", result);
+    expect(repo.failRun).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   it("uses the generic message for unexpected errors and logs them", async () => {
     const repo = fakeRepo();
     const logger = quietLogger();

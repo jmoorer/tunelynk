@@ -5,9 +5,15 @@ import {
   type RunResponse,
 } from "@tunelynk/shared";
 import { Hono } from "hono";
-import { type AuthDeps, type AuthEnv, ensureUser } from "../auth/middleware";
+import {
+  type AuthDeps,
+  type AuthEnv,
+  clearSessionCookie,
+  ensureUser,
+} from "../auth/middleware";
+import { requireJson } from "../http/requireJson";
 import type { RunJob } from "./executor";
-import type { RunRepo } from "./repo";
+import { type RunRepo, UserGoneError } from "./repo";
 
 export const GUEST_LENGTH = 20;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,7 +28,7 @@ export type RunsDeps = {
 
 export function runsRoutes(deps: RunsDeps, auth: AuthDeps) {
   return new Hono<AuthEnv>()
-    .post("/", async (c) => {
+    .post("/", requireJson, async (c) => {
       const body = CreateRunRequest.safeParse(
         await c.req.json().catch(() => null),
       );
@@ -39,12 +45,20 @@ export function runsRoutes(deps: RunsDeps, auth: AuthDeps) {
       }
 
       const user = await ensureUser(c, auth);
-      const run = await deps.repo.createRun({
-        userId: user.id,
-        prompt,
-        length: GUEST_LENGTH,
-        model: deps.model,
-      });
+      let run: Awaited<ReturnType<RunRepo["createRun"]>>;
+      try {
+        run = await deps.repo.createRun({
+          userId: user.id,
+          prompt,
+          length: GUEST_LENGTH,
+          model: deps.model,
+        });
+      } catch (err) {
+        // A sign-in in another tab claimed this guest mid-request.
+        if (!(err instanceof UserGoneError)) throw err;
+        clearSessionCookie(c, auth.secureCookies);
+        return c.json({ error: "session_expired" } satisfies ApiError, 401);
+      }
       if (!run.created) {
         return c.json(
           {

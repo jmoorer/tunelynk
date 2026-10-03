@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestDatabase } from "../test/db";
 import { RUN_ERRORS } from "./messages";
-import { createRunRepo, type RunRepo } from "./repo";
+import { createRunRepo, type RunRepo, UserGoneError } from "./repo";
 
 const track = (
   id: string,
@@ -259,6 +259,50 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
     const spent = await repo.todaysCostMicros();
     expect(await repo.committedCostMicros(0)).toBe(spent);
     expect(await repo.committedCostMicros(500)).toBe(spent + 500 * active);
+  });
+
+  it("re-attributes usage when its owner is claimed during the insert", async () => {
+    const { userId: guest, runId, playlistId } = await newRun();
+    const account = await newGuest();
+    let commit: () => void = () => {};
+    const gate = new Promise<void>((r) => (commit = r));
+    let ready: () => void = () => {};
+    const locked = new Promise<void>((r) => (ready = r));
+    // An uncommitted claim: playlist moved, guest deleted.
+    const claim = handle.db.transaction(async (tx) => {
+      await tx
+        .update(playlists)
+        .set({ userId: account })
+        .where(eq(playlists.id, playlistId));
+      await tx.delete(users).where(eq(users.id, guest));
+      ready();
+      await gate;
+    });
+    await locked;
+    const write = repo.recordUsage({
+      runId,
+      usage,
+      costMicros: 7,
+      kind: "guest",
+    });
+    // The insert reads the old owner and blocks on its FK check.
+    await new Promise((r) => setTimeout(r, 150));
+    commit();
+    await claim;
+    await write;
+    const [row] = await handle.db
+      .select({ u: llmUsage.userId })
+      .from(llmUsage)
+      .where(eq(llmUsage.costMicros, 7));
+    expect(row?.u).toBe(account);
+  });
+
+  it("refuses to create a run for a user that no longer exists", async () => {
+    const userId = await newGuest();
+    await handle.db.delete(users).where(eq(users.id, userId));
+    await expect(
+      repo.createRun({ userId, prompt: "p", length: 20, model: "m" }),
+    ).rejects.toBeInstanceOf(UserGoneError);
   });
 
   it("fails only stale active runs at boot", async () => {
