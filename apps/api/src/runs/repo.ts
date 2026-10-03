@@ -6,7 +6,6 @@ import {
   type RunCandidate,
   runTracks,
   tracks,
-  users,
 } from "@tunelynk/db";
 import type { GeneratedTrack, LlmUsage, Stage } from "@tunelynk/engine";
 import type { RunResponse } from "@tunelynk/shared";
@@ -24,35 +23,6 @@ export type CompletedRun = {
 
 export function createRunRepo(db: Db) {
   return {
-    async createGuest(): Promise<string> {
-      const [row] = await db
-        .insert(users)
-        .values({ isGuest: true })
-        .returning({ id: users.id });
-      if (!row) throw new Error("guest insert returned no row");
-      return row.id;
-    },
-
-    async findUser(id: string): Promise<{ id: string } | undefined> {
-      const [row] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, id));
-      return row;
-    },
-
-    async touchUser(id: string): Promise<void> {
-      await db
-        .update(users)
-        .set({ lastSeenAt: sql`now()` })
-        .where(
-          and(
-            eq(users.id, id),
-            lt(users.lastSeenAt, sql`now() - interval '1 minute'`),
-          ),
-        );
-    },
-
     async todaysCostMicros(): Promise<number> {
       const [row] = await db
         .select({
@@ -248,14 +218,18 @@ export function createRunRepo(db: Db) {
       return rows.length > 0;
     },
 
+    // Attributes usage to the playlist's owner at write time, so a guest
+    // claimed while its run was in flight doesn't break the FK.
     async recordUsage(args: {
-      userId: string | null;
+      runId: string;
       usage: LlmUsage;
       costMicros: number;
       kind: "guest" | "user" | "scheduled";
     }): Promise<void> {
       await db.insert(llmUsage).values({
-        userId: args.userId,
+        userId: sql`(select ${playlists.userId} from ${generationRuns}
+          join ${playlists} on ${playlists.id} = ${generationRuns.playlistId}
+          where ${generationRuns.id} = ${args.runId})`,
         model: args.usage.model,
         inputTokens: args.usage.inputTokens,
         outputTokens: args.usage.outputTokens,

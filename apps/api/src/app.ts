@@ -45,7 +45,7 @@ export function createApp({ db, webDir, auth, runs }: AppDeps) {
     })
     .route("/me", meRoutes(auth))
     .route("/auth", authRoutes(auth))
-    .route("/runs", runsRoutes(runs));
+    .route("/runs", runsRoutes(runs, auth));
 
   const app = new Hono().route("/api", api);
 

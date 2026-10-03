@@ -47,8 +47,6 @@ const app = createApp({
   runs: {
     repo,
     executor,
-    sessionSecret: env.SESSION_SECRET,
-    secureCookies: env.COOKIE_SECURE,
     dailyBudgetMicros: Math.round(env.LLM_DAILY_BUDGET_USD * 1_000_000),
     // Worst case per run: two LLM attempts, each up to ~2k input tokens and
     // LLM_MAX_TOKENS output.

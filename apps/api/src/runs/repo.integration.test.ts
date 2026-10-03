@@ -1,4 +1,4 @@
-import { generationRuns, llmUsage, users } from "@tunelynk/db";
+import { generationRuns, llmUsage, playlists, users } from "@tunelynk/db";
 import type { GeneratedTrack } from "@tunelynk/engine";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -41,8 +41,17 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
   });
   afterAll(() => handle.drop());
 
+  const newGuest = async () => {
+    const [row] = await handle.db
+      .insert(users)
+      .values({ isGuest: true })
+      .returning({ id: users.id });
+    if (!row) throw new Error("no guest");
+    return row.id;
+  };
+
   const newRun = async () => {
-    const userId = await repo.createGuest();
+    const userId = await newGuest();
     const run = await repo.createRun({
       userId,
       prompt: "road trip",
@@ -55,7 +64,11 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
   it("creates a guest, a draft playlist, and a queued run", async () => {
     const { userId, created, runId, playlistId } = await newRun();
     expect(created).toBe(true);
-    expect(await repo.findUser(userId)).toEqual({ id: userId });
+    const [owner] = await handle.db
+      .select({ userId: playlists.userId })
+      .from(playlists)
+      .where(eq(playlists.id, playlistId));
+    expect(owner?.userId).toBe(userId);
     expect(await repo.getRun(runId)).toEqual({
       id: runId,
       status: "queued",
@@ -83,7 +96,7 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
   });
 
   it("serializes concurrent creation for one user", async () => {
-    const userId = await repo.createGuest();
+    const userId = await newGuest();
     const args = { userId, prompt: "p", length: 20, model: "claude-haiku-4-5" };
     const results = await Promise.all([
       repo.createRun(args),
@@ -206,8 +219,8 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
 
   it("sums only today's usage", async () => {
     const before = await repo.todaysCostMicros();
-    const userId = await repo.createGuest();
-    await repo.recordUsage({ userId, usage, costMicros: 1100, kind: "guest" });
+    const { userId, runId } = await newRun();
+    await repo.recordUsage({ runId, usage, costMicros: 1100, kind: "guest" });
     await handle.db.insert(llmUsage).values({
       userId,
       model: "claude-haiku-4-5",
@@ -218,6 +231,21 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
       createdAt: new Date(Date.now() - 2 * 86_400_000),
     });
     expect(await repo.todaysCostMicros()).toBe(before + 1100);
+  });
+
+  it("records usage against the playlist's current owner", async () => {
+    const { runId, playlistId } = await newRun();
+    const owner = await newGuest();
+    await handle.db
+      .update(playlists)
+      .set({ userId: owner })
+      .where(eq(playlists.id, playlistId));
+    await repo.recordUsage({ runId, usage, costMicros: 5, kind: "guest" });
+    const [row] = await handle.db
+      .select({ u: llmUsage.userId })
+      .from(llmUsage)
+      .where(eq(llmUsage.costMicros, 5));
+    expect(row?.u).toBe(owner);
   });
 
   it("reserves cost for every active run", async () => {
@@ -231,27 +259,6 @@ describe.skipIf(!process.env.DATABASE_URL)("run repository", () => {
     const spent = await repo.todaysCostMicros();
     expect(await repo.committedCostMicros(0)).toBe(spent);
     expect(await repo.committedCostMicros(500)).toBe(spent + 500 * active);
-  });
-
-  it("touches last_seen_at at most once a minute", async () => {
-    const userId = await repo.createGuest();
-    await handle.db
-      .update(users)
-      .set({ lastSeenAt: sql`now() - interval '2 minutes'` })
-      .where(eq(users.id, userId));
-    const read = async () =>
-      (
-        await handle.db
-          .select({ t: users.lastSeenAt })
-          .from(users)
-          .where(eq(users.id, userId))
-      )[0]?.t.getTime() ?? 0;
-    const stale = await read();
-    await repo.touchUser(userId);
-    const fresh = await read();
-    expect(fresh).toBeGreaterThan(stale);
-    await repo.touchUser(userId);
-    expect(await read()).toBe(fresh);
   });
 
   it("fails only stale active runs at boot", async () => {
