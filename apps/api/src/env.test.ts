@@ -5,6 +5,7 @@ const DATABASE_URL = "postgres://tunelynk:tunelynk@localhost:5432/tunelynk";
 const SESSION_SECRET = "s".repeat(32);
 const base = {
   DATABASE_URL,
+  APP_URL: "http://localhost:5173/",
   APPLE_TEAM_ID: "TEAM",
   APPLE_KEY_ID: "KEY",
   APPLE_PRIVATE_KEY: "PRIVATE",
@@ -17,6 +18,7 @@ describe("parseEnv", () => {
     expect(parseEnv(base)).toEqual({
       DATABASE_URL,
       PORT: 3000,
+      APP_URL: "http://localhost:5173",
       APPLE_TEAM_ID: "TEAM",
       APPLE_KEY_ID: "KEY",
       APPLE_PRIVATE_KEY: "PRIVATE",
@@ -31,6 +33,7 @@ describe("parseEnv", () => {
       LLM_API_KEY: "sk-ant",
       LLM_MAX_TOKENS: 2000,
       LLM_DAILY_BUDGET_USD: 2,
+      EMAIL: { provider: "console" },
     });
   });
 
@@ -50,6 +53,52 @@ describe("parseEnv", () => {
     expect(env.LLM_MODEL_GUEST).toBe("gpt-4.1-mini");
     expect(env.LLM_API_KEY).toBe("sk-oai");
   });
+
+  it("requires APP_URL", () => {
+    const { APP_URL: _omit, ...rest } = base;
+    expect(() => parseEnv(rest)).toThrow(/APP_URL/);
+  });
+
+  it("rejects a non-http APP_URL", () => {
+    expect(() => parseEnv({ ...base, APP_URL: "ftp://x.co" })).toThrow(
+      /APP_URL/,
+    );
+  });
+
+  it("strips trailing slashes from APP_URL", () => {
+    expect(
+      parseEnv({ ...base, APP_URL: "https://tunelynk.bytmoor.com//" }).APP_URL,
+    ).toBe("https://tunelynk.bytmoor.com");
+  });
+
+  it("configures Resend when EMAIL_PROVIDER=resend", () => {
+    const env = parseEnv({
+      ...base,
+      EMAIL_PROVIDER: "resend",
+      RESEND_API_KEY: "re_123",
+      EMAIL_FROM: "Tunelynk <login@bytmoor.com>",
+    });
+    expect(env.EMAIL).toEqual({
+      provider: "resend",
+      apiKey: "re_123",
+      from: "Tunelynk <login@bytmoor.com>",
+    });
+    expect(env).not.toHaveProperty("RESEND_API_KEY");
+  });
+
+  it.each(["RESEND_API_KEY", "EMAIL_FROM"])(
+    "requires %s when EMAIL_PROVIDER=resend",
+    (name) => {
+      const env = {
+        ...base,
+        EMAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "re_123",
+        EMAIL_FROM: "Tunelynk <login@bytmoor.com>",
+        [name]: "",
+      };
+      expect(() => parseEnv(env)).toThrow(new RegExp(name));
+    },
+  );
 
   it("parses COOKIE_SECURE=false", () => {
     expect(parseEnv({ ...base, COOKIE_SECURE: "false" }).COOKIE_SECURE).toBe(

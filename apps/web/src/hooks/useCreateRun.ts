@@ -10,6 +10,10 @@ export const CREATE_ERRORS = {
   not_found: "Something went wrong. Try again.",
   json_required: "Something went wrong. Try again.",
   session_expired: "Your sign-in changed in another tab. Try again.",
+  invalid_email: "Something went wrong. Try again.",
+  too_many_requests: "Something went wrong. Try again.",
+  email_failed: "Something went wrong. Try again.",
+  invalid_or_expired: "Something went wrong. Try again.",
   network: "Couldn't reach Tunelynk. Check your connection and try again.",
 } as const;
 
