@@ -18,7 +18,9 @@ export type Engine = (
 
 export type RunJob = {
   runId: string;
-  userId: string;
+  // Who started the run, for llm_usage.kind. The usage row's user is the
+  // playlist's owner when it is written (a guest may be claimed mid-run).
+  kind: "guest" | "user";
   prompt: string;
   length: number;
 };
@@ -49,12 +51,12 @@ export function createRunExecutor({
   deadlineMs?: number;
   logger?: Pick<Console, "error">;
 }) {
-  const recordUsage = (userId: string, usage: LlmUsage) =>
+  const recordUsage = (job: RunJob, usage: LlmUsage) =>
     repo.recordUsage({
-      userId,
+      runId: job.runId,
       usage,
       costMicros: costMicros(usage),
-      kind: "guest",
+      kind: job.kind,
     });
 
   async function execute(job: RunJob): Promise<void> {
@@ -69,13 +71,16 @@ export function createRunExecutor({
             );
         },
       );
-      await recordUsage(job.userId, result.usage);
+      // A lost usage row must not fail a playlist that was generated.
+      await recordUsage(job, result.usage).catch((err) =>
+        logger.error(`run ${job.runId}: usage write failed`, err),
+      );
       await repo.completeRun(job.runId, result);
     } catch (err) {
       logger.error(`run ${job.runId} failed`, err);
       if (err instanceof EngineError && err.usage) {
         // A failed usage write must not leave the run stuck in "running".
-        await recordUsage(job.userId, err.usage).catch((usageErr) =>
+        await recordUsage(job, err.usage).catch((usageErr) =>
           logger.error(`run ${job.runId}: usage write failed`, usageErr),
         );
       }

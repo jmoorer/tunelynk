@@ -15,7 +15,7 @@ const usage = {
 };
 const job = {
   runId: "run-1",
-  userId: "user-1",
+  kind: "guest" as const,
   prompt: "road trip",
   length: 20,
 };
@@ -61,13 +61,24 @@ describe("createRunExecutor", () => {
       ["run-1", "matching"],
     ]);
     expect(repo.recordUsage).toHaveBeenCalledWith({
-      userId: "user-1",
+      runId: "run-1",
       usage,
       costMicros: costMicros(usage),
       kind: "guest",
     });
     expect(repo.completeRun).toHaveBeenCalledWith("run-1", result);
     expect(repo.failRun).not.toHaveBeenCalled();
+  });
+
+  it("records usage with the job's kind", async () => {
+    const repo = fakeRepo();
+    await createRunExecutor({ repo, engine: async () => result }).start({
+      ...job,
+      kind: "user",
+    });
+    expect(repo.recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", kind: "user" }),
+    );
   });
 
   it("does nothing when the run is no longer queued", async () => {
@@ -122,6 +133,21 @@ describe("createRunExecutor", () => {
       RUN_ERRORS.refusal,
       undefined,
     );
+  });
+
+  it("completes the run even when recording usage fails", async () => {
+    const repo = fakeRepo({
+      recordUsage: vi.fn(async () => Promise.reject(new Error("db blip"))),
+    });
+    const logger = quietLogger();
+    await createRunExecutor({
+      repo,
+      engine: async () => result,
+      logger,
+    }).start(job);
+    expect(repo.completeRun).toHaveBeenCalledWith("run-1", result);
+    expect(repo.failRun).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalled();
   });
 
   it("uses the generic message for unexpected errors and logs them", async () => {

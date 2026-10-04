@@ -57,6 +57,8 @@ export const ApiError = z.object({
     "budget_exceeded",
     "run_in_progress",
     "not_found",
+    "json_required",
+    "session_expired",
   ]),
   runId: z.uuid().optional(),
   playlistId: z.uuid().optional(),

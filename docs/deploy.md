@@ -70,4 +70,5 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
   coordinated across instances.
 - **LLM spend:** every run records its cost in `llm_usage`. New runs are refused with `503 budget_exceeded` once today's (UTC) spend plus a reservation for in-flight runs reaches `LLM_DAILY_BUDGET_USD`.
 - **Stuck runs:** a sweeper fails `queued`/`running` runs older than 3 minutes at boot and every minute, so a redeploy mid-run never strands a guest.
+- **Sessions:** guests and signed-in users carry an httpOnly `tl_session` cookie; the database stores only its SHA-256 (`sessions`). Old `tl_guest` cookies from before #11 are upgraded to a session on the next request. `SESSION_SECRET` still signs those legacy cookies (and, from #11 slice C, the short-lived Apple sign-in state cookie), so keep it unchanged.
 - **Local image check:** `docker build -t tunelynk . && docker run --rm -p 3100:3000 --env-file .env -e DATABASE_URL=postgres://tunelynk:tunelynk@host.docker.internal:5432/tunelynk -e PORT=3000 tunelynk` (the server needs the full env from `.env`, not just `DATABASE_URL`)

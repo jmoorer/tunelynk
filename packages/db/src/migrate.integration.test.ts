@@ -43,6 +43,7 @@ describe.skipIf(!url)("migrateDb against a fresh database", () => {
         select to_regclass(name)::text as t from unnest(array[
           'public.users', 'public.playlists', 'public.generation_runs',
           'public.tracks', 'public.run_tracks', 'public.llm_usage',
+          'public.auth_identities', 'public.login_tokens', 'public.sessions',
           'public.app_meta'
         ]) as name`;
       expect(tables.map((r) => r.t)).toEqual([
@@ -52,6 +53,9 @@ describe.skipIf(!url)("migrateDb against a fresh database", () => {
         "tracks",
         "run_tracks",
         "llm_usage",
+        "auth_identities",
+        "login_tokens",
+        "sessions",
         null,
       ]);
     } finally {

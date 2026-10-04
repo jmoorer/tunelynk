@@ -8,6 +8,8 @@ export const CREATE_ERRORS = {
   budget_exceeded: "Daily generation limit reached. Try again tomorrow.",
   run_in_progress: "You already have a playlist generating.",
   not_found: "Something went wrong. Try again.",
+  json_required: "Something went wrong. Try again.",
+  session_expired: "Your sign-in changed in another tab. Try again.",
   network: "Couldn't reach Tunelynk. Check your connection and try again.",
 } as const;
 

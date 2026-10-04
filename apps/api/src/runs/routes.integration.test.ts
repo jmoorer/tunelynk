@@ -1,9 +1,12 @@
 import { llmUsage, playlists, users } from "@tunelynk/db";
 import { type GenerateResult, RefusalError } from "@tunelynk/engine";
 import type { RunResponse } from "@tunelynk/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { generateSignedCookie } from "hono/cookie";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
+import { createSessionRepo } from "../auth/sessions";
+import { finishSignIn } from "../auth/signIn";
 import { createTestDatabase } from "../test/db";
 import { createRunExecutor, type Engine, type RunJob } from "./executor";
 import { RUN_ERRORS } from "./messages";
@@ -45,7 +48,11 @@ const okResult: GenerateResult = {
 };
 
 const cookieFrom = (res: Response) =>
-  res.headers.get("set-cookie")?.split(";")[0] ?? "";
+  res.headers
+    .getSetCookie()
+    .filter((c) => c.startsWith("tl_session="))
+    .at(-1)
+    ?.split(";")[0] ?? "";
 
 describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
   let handle: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -75,6 +82,13 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     const build = () =>
       createApp({
         db: handle.db,
+        auth: {
+          sessions: createSessionRepo(handle.db),
+          sessionSecret: SECRET,
+          get secureCookies() {
+            return secureCookies;
+          },
+        },
         runs: {
           repo,
           executor: {
@@ -83,10 +97,6 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
               pending.push(p);
               return p;
             },
-          },
-          sessionSecret: SECRET,
-          get secureCookies() {
-            return secureCookies;
           },
           dailyBudgetMicros: 2_000_000,
           get reservePerRunMicros() {
@@ -121,8 +131,8 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
       playlistId: string;
     };
 
-    const setCookie = res.headers.get("set-cookie") ?? "";
-    expect(setCookie).toMatch(/^tl_guest=/);
+    const setCookie = res.headers.getSetCookie().join("\n");
+    expect(setCookie).toMatch(/^tl_session=[A-Za-z0-9_-]{43};/);
     expect(setCookie).toMatch(/HttpOnly/);
     expect(setCookie).toMatch(/SameSite=Lax/);
     expect(setCookie).toMatch(/Max-Age=2592000/);
@@ -277,7 +287,9 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     await Promise.all(pending);
     const tampered = `${cookieFrom(first).slice(0, -3)}abc`;
     const second = await post({ prompt: "two" }, tampered);
-    expect(second.headers.get("set-cookie")).toMatch(/^tl_guest=/);
+    expect(second.headers.getSetCookie().join("\n")).toMatch(
+      /tl_session=[A-Za-z0-9_-]{43};/,
+    );
     await Promise.all(pending);
     expect(await count(users)).toBe(2);
   });
@@ -292,7 +304,9 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
 
     const second = await post({ prompt: "two" }, cookie);
     expect(second.status).toBe(202);
-    expect(second.headers.get("set-cookie")).toMatch(/^tl_guest=/);
+    expect(second.headers.getSetCookie().join("\n")).toMatch(
+      /tl_session=[A-Za-z0-9_-]{43};/,
+    );
     await Promise.all(pending);
     expect(await count(users)).toBe(1);
   });
@@ -305,5 +319,117 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
     expect(malformed.status).toBe(404);
     expect(await malformed.json()).toEqual({ error: "not_found" });
     expect(await count(users)).toBe(0);
+  });
+
+  it("keeps a legacy tl_guest user across the upgrade", async () => {
+    const [guest] = await handle.db
+      .insert(users)
+      .values({ isGuest: true })
+      .returning({ id: users.id });
+    const legacy = (
+      await generateSignedCookie("tl_guest", guest?.id ?? "", SECRET)
+    ).split(";")[0];
+    const res = await post({ prompt: "p" }, legacy);
+    expect(res.status).toBe(202);
+    await Promise.all(pending);
+    expect(await count(users)).toBe(1);
+    const [owner] = await handle.db
+      .select({ u: playlists.userId })
+      .from(playlists);
+    expect(owner?.u).toBe(guest?.id);
+  });
+
+  it("runs as the signed-in user and records user usage", async () => {
+    const user = await finishSignIn(handle.db, {
+      identity: { method: "email", subject: "a@b.co" },
+      guestUserIds: [],
+    });
+    const res = await post({ prompt: "p" }, `tl_session=${user.token}`);
+    expect(res.status).toBe(202);
+    expect(res.headers.getSetCookie()).toEqual([]);
+    await Promise.all(pending);
+    expect(await count(users)).toBe(1);
+    const [owner] = await handle.db
+      .select({ u: playlists.userId })
+      .from(playlists);
+    expect(owner?.u).toBe(user.userId);
+    const [spent] = await handle.db
+      .select({ u: llmUsage.userId, k: llmUsage.kind })
+      .from(llmUsage);
+    expect(spent).toEqual({ u: user.userId, k: "user" });
+  });
+
+  it("credits usage to the account when the guest is claimed mid-run", async () => {
+    let release: (r: GenerateResult) => void = () => {};
+    let started: () => void = () => {};
+    const engineStarted = new Promise<void>((r) => (started = r));
+    engine = () =>
+      new Promise((resolve) => {
+        release = resolve;
+        started();
+      });
+    const res = await post({ prompt: "p" });
+    const guestToken = cookieFrom(res).slice("tl_session=".length);
+    await engineStarted;
+    const guest = await createSessionRepo(handle.db).resolve(guestToken);
+    const account = await finishSignIn(handle.db, {
+      identity: { method: "email", subject: "a@b.co" },
+      guestUserIds: [guest?.userId],
+      currentSessionId: guest?.sessionId,
+    });
+    release(okResult);
+    await Promise.all(pending);
+    const [spent] = await handle.db
+      .select({ u: llmUsage.userId, k: llmUsage.kind })
+      .from(llmUsage);
+    expect(spent).toEqual({ u: account.userId, k: "guest" });
+  });
+
+  it("rejects a non-JSON content type with 415 and writes nothing", async () => {
+    const res = await app.request("/api/runs", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ prompt: "p" }),
+    });
+    expect(res.status).toBe(415);
+    expect(await res.json()).toEqual({ error: "json_required" });
+    expect(await count(users)).toBe(0);
+  });
+
+  it("returns 401 session_expired when the user vanishes before the run is created", async () => {
+    const repo = createRunRepo(handle.db);
+    const racing = createApp({
+      db: handle.db,
+      auth: {
+        sessions: createSessionRepo(handle.db),
+        sessionSecret: SECRET,
+        secureCookies: false,
+      },
+      runs: {
+        repo: {
+          ...repo,
+          // A claim commits between the middleware and createRun.
+          createRun: async (args) => {
+            await handle.db.delete(users).where(eq(users.id, args.userId));
+            return repo.createRun(args);
+          },
+        },
+        executor: { start: async () => {} },
+        dailyBudgetMicros: 2_000_000,
+        reservePerRunMicros: 0,
+        model: "claude-haiku-4-5",
+      },
+    });
+    const guest = await createSessionRepo(handle.db).createGuestSession();
+    const res = await racing.request("/api/runs", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `tl_session=${guest.token}`,
+      },
+      body: JSON.stringify({ prompt: "p" }),
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "session_expired" });
   });
 });

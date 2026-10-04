@@ -3,6 +3,7 @@ import { createAppleCatalog } from "@tunelynk/connectors";
 import { createDb } from "@tunelynk/db";
 import { costMicros, createLlmProvider, generate } from "@tunelynk/engine";
 import { createApp } from "./app";
+import { createSessionRepo } from "./auth/sessions";
 import { loadEnv } from "./env";
 import { resolveRuntimePaths } from "./paths";
 import { createRunExecutor, RUN_DEADLINE_MS } from "./runs/executor";
@@ -38,11 +39,14 @@ const executor = createRunExecutor({
 const app = createApp({
   db,
   webDir,
+  auth: {
+    sessions: createSessionRepo(db),
+    sessionSecret: env.SESSION_SECRET,
+    secureCookies: env.COOKIE_SECURE,
+  },
   runs: {
     repo,
     executor,
-    sessionSecret: env.SESSION_SECRET,
-    secureCookies: env.COOKIE_SECURE,
     dailyBudgetMicros: Math.round(env.LLM_DAILY_BUDGET_USD * 1_000_000),
     // Worst case per run: two LLM attempts, each up to ~2k input tokens and
     // LLM_MAX_TOKENS output.

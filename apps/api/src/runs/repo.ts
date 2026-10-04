@@ -22,37 +22,25 @@ export type CompletedRun = {
   candidates: RunCandidate[];
 };
 
+// The user was deleted (claimed by a sign-in) after the request resolved it.
+export class UserGoneError extends Error {
+  constructor(userId: string) {
+    super(`User ${userId} no longer exists`);
+    this.name = "UserGoneError";
+  }
+}
+
+const FOREIGN_KEY_VIOLATION = "23503";
+const isForeignKeyViolation = (err: unknown): boolean => {
+  const { code, cause } = (err ?? {}) as { code?: unknown; cause?: unknown };
+  return (
+    code === FOREIGN_KEY_VIOLATION ||
+    (cause !== undefined && isForeignKeyViolation(cause))
+  );
+};
+
 export function createRunRepo(db: Db) {
   return {
-    async createGuest(): Promise<string> {
-      const [row] = await db
-        .insert(users)
-        .values({ isGuest: true })
-        .returning({ id: users.id });
-      if (!row) throw new Error("guest insert returned no row");
-      return row.id;
-    },
-
-    async findUser(id: string): Promise<{ id: string } | undefined> {
-      const [row] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, id));
-      return row;
-    },
-
-    async touchUser(id: string): Promise<void> {
-      await db
-        .update(users)
-        .set({ lastSeenAt: sql`now()` })
-        .where(
-          and(
-            eq(users.id, id),
-            lt(users.lastSeenAt, sql`now() - interval '1 minute'`),
-          ),
-        );
-    },
-
     async todaysCostMicros(): Promise<number> {
       const [row] = await db
         .select({
@@ -94,6 +82,14 @@ export function createRunRepo(db: Db) {
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtext(${args.userId}))`,
         );
+        // finishSignIn takes the same lock before claiming a guest, so the
+        // user is either still here (and stays until commit) or already gone.
+        const [owner] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, args.userId))
+          .for("key share");
+        if (!owner) throw new UserGoneError(args.userId);
         const [active] = await tx
           .select({
             runId: generationRuns.id,
@@ -248,20 +244,32 @@ export function createRunRepo(db: Db) {
       return rows.length > 0;
     },
 
+    // Attributes usage to the playlist's owner at write time, so a guest
+    // claimed while its run was in flight doesn't break the FK.
     async recordUsage(args: {
-      userId: string | null;
+      runId: string;
       usage: LlmUsage;
       costMicros: number;
       kind: "guest" | "user" | "scheduled";
     }): Promise<void> {
-      await db.insert(llmUsage).values({
-        userId: args.userId,
-        model: args.usage.model,
-        inputTokens: args.usage.inputTokens,
-        outputTokens: args.usage.outputTokens,
-        costMicros: args.costMicros,
-        kind: args.kind,
-      });
+      const insert = () =>
+        db.insert(llmUsage).values({
+          userId: sql`(select ${playlists.userId} from ${generationRuns}
+            join ${playlists} on ${playlists.id} = ${generationRuns.playlistId}
+            where ${generationRuns.id} = ${args.runId})`,
+          model: args.usage.model,
+          inputTokens: args.usage.inputTokens,
+          outputTokens: args.usage.outputTokens,
+          costMicros: args.costMicros,
+          kind: args.kind,
+        });
+      try {
+        await insert();
+      } catch (err) {
+        // A claim deleted the owner we read; the retry reads the new owner.
+        if (!isForeignKeyViolation(err)) throw err;
+        await insert();
+      }
     },
 
     async getRun(runId: string): Promise<RunResponse | undefined> {
