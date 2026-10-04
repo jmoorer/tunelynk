@@ -30,6 +30,10 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    ```
    DATABASE_URL=<internal Postgres URL from step 1>
    PORT=3000
+   APP_URL=https://tunelynk.bytmoor.com
+   EMAIL_PROVIDER=resend
+   RESEND_API_KEY=<Resend API key, sending access>
+   EMAIL_FROM=Tunelynk <login@bytmoor.com>
    APPLE_TEAM_ID=<Apple developer team id>
    APPLE_KEY_ID=<MusicKit key id>
    APPLE_PRIVATE_KEY=<base64 of the MusicKit .p8 file>
@@ -40,6 +44,8 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    Optional, with defaults: `LLM_MODEL_GUEST` (`claude-haiku-4-5`; `gpt-4.1-mini` for openai), `LLM_MAX_TOKENS` (2000), `LLM_DAILY_BUDGET_USD` (2), `APPLE_STOREFRONT` (`us`), `APPLE_CATALOG_RPS` / `_BURST` / `_CONCURRENCY` (8 / 10 / 4). Leave `COOKIE_SECURE` unset; it defaults to `true`, which is right behind HTTPS.
 
    **Set these before a deploy that includes the runs API.** The server validates them at boot and exits if any are missing. The new container then never becomes healthy and the old one keeps serving, but the deploy fails. `migrate.js` needs only `DATABASE_URL`.
+
+   **Resend (magic-link email).** Create a Resend account, add the sending domain `bytmoor.com` (Domains → Add), and create the DNS records Resend lists (an SPF `TXT` and the DKIM `TXT`/`CNAME` records; DMARC is optional) at the DNS provider. Wait until Resend shows the domain as **Verified**, then create an API key with **Sending access** and put it in `RESEND_API_KEY`. `EMAIL_FROM` must use the verified domain. `EMAIL_PROVIDER` is required in production (`COOKIE_SECURE` unset or `true`); the server exits at boot without it. `EMAIL_PROVIDER=console` logs sign-in links instead of sending them, so anyone with log access could use them. Use it only for local http.
 
    No `NODE_ENV` is needed; the app does not read it. (The Dockerfile forces `NODE_ENV=development` for `pnpm install`, so the build is safe even if one is set.)
 4. **Domain.** Host `tunelynk.bytmoor.com`, container port `3000`, HTTPS on,

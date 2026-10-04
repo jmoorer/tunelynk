@@ -1,5 +1,6 @@
 import { assertPricedModel } from "@tunelynk/engine";
 import { z } from "zod";
+import type { EmailConfig } from "./auth/mailer";
 
 const DEFAULT_MODELS = {
   anthropic: "claude-haiku-4-5",
@@ -15,6 +16,10 @@ const EnvSchema = z
   .object({
     DATABASE_URL: z.url(),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    // Public origin for links and OAuth redirects, no trailing slash.
+    APP_URL: z
+      .url({ protocol: /^https?$/ })
+      .transform((url) => url.replace(/\/+$/, "")),
     APPLE_TEAM_ID: z.string().min(1),
     APPLE_KEY_ID: z.string().min(1),
     APPLE_PRIVATE_KEY: z.string().min(1),
@@ -33,6 +38,11 @@ const EnvSchema = z
     OPENAI_API_KEY: z.string().optional(),
     LLM_MAX_TOKENS: positiveInt(2000),
     LLM_DAILY_BUDGET_USD: positiveNumber(2),
+    // Unset means console, allowed only for local http (COOKIE_SECURE=false),
+    // so production never logs live sign-in links by accident.
+    EMAIL_PROVIDER: z.enum(["console", "resend"]).optional(),
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(),
   })
   .transform((env, ctx) => {
     const keyName =
@@ -57,12 +67,49 @@ const EnvSchema = z
       });
       return z.NEVER;
     }
+    if (!env.EMAIL_PROVIDER && env.COOKIE_SECURE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["EMAIL_PROVIDER"],
+        message:
+          "required when COOKIE_SECURE=true (resend, or console to log links)",
+      });
+      return z.NEVER;
+    }
+    let email: EmailConfig = { provider: "console" };
+    if (env.EMAIL_PROVIDER === "resend") {
+      const { RESEND_API_KEY: resendKey, EMAIL_FROM: from } = env;
+      if (!resendKey || !from) {
+        for (const [name, value] of [
+          ["RESEND_API_KEY", resendKey],
+          ["EMAIL_FROM", from],
+        ] as const) {
+          if (!value) {
+            ctx.addIssue({
+              code: "custom",
+              path: [name],
+              message: "required when EMAIL_PROVIDER=resend",
+            });
+          }
+        }
+        return z.NEVER;
+      }
+      email = { provider: "resend", apiKey: resendKey, from };
+    }
     const {
       ANTHROPIC_API_KEY: _anthropic,
       OPENAI_API_KEY: _openai,
+      EMAIL_PROVIDER: _provider,
+      RESEND_API_KEY: _resend,
+      EMAIL_FROM: _from,
       ...rest
     } = env;
-    return { ...rest, LLM_MODEL_GUEST: model, LLM_API_KEY: apiKey };
+    return {
+      ...rest,
+      LLM_MODEL_GUEST: model,
+      LLM_API_KEY: apiKey,
+      EMAIL: email,
+    };
   });
 
 const MigrateEnvSchema = z.object({ DATABASE_URL: z.url() });

@@ -3,6 +3,8 @@ import { createAppleCatalog } from "@tunelynk/connectors";
 import { createDb } from "@tunelynk/db";
 import { costMicros, createLlmProvider, generate } from "@tunelynk/engine";
 import { createApp } from "./app";
+import { createLoginTokenRepo } from "./auth/loginTokens";
+import { createMailer } from "./auth/mailer";
 import { createSessionRepo } from "./auth/sessions";
 import { loadEnv } from "./env";
 import { resolveRuntimePaths } from "./paths";
@@ -11,6 +13,9 @@ import { createRunRepo } from "./runs/repo";
 import { startStaleRunSweeper } from "./runs/sweeper";
 
 const env = loadEnv();
+if (env.EMAIL.provider === "console") {
+  console.warn("EMAIL_PROVIDER=console: sign-in links are logged, not sent");
+}
 const { webDir } = resolveRuntimePaths(import.meta.url);
 const db = createDb(env.DATABASE_URL);
 const repo = createRunRepo(db);
@@ -43,6 +48,11 @@ const app = createApp({
     sessions: createSessionRepo(db),
     sessionSecret: env.SESSION_SECRET,
     secureCookies: env.COOKIE_SECURE,
+  },
+  email: {
+    loginTokens: createLoginTokenRepo(db),
+    mailer: createMailer(env.EMAIL),
+    appUrl: env.APP_URL,
   },
   runs: {
     repo,
