@@ -4,6 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Db, ping } from "@tunelynk/db";
 import type { HealthResponse } from "@tunelynk/shared";
 import { Hono } from "hono";
+import { type EmailDeps, emailRoutes } from "./auth/email";
 import {
   type AuthDeps,
   type AuthEnv,
@@ -17,6 +18,7 @@ export type AppDeps = {
   // Built web SPA (must contain index.html). Unset in dev and tests.
   webDir?: string;
   auth: AuthDeps;
+  email: EmailDeps;
   runs: RunsDeps;
 };
 
@@ -31,7 +33,7 @@ const cacheControl = (path: string) =>
     ? "public, max-age=31536000, immutable"
     : "no-cache";
 
-export function createApp({ db, webDir, auth, runs }: AppDeps) {
+export function createApp({ db, webDir, auth, email, runs }: AppDeps) {
   const api = new Hono<AuthEnv>()
     .use("*", sessionMiddleware(auth))
     .get("/health", async (c) => {
@@ -45,6 +47,7 @@ export function createApp({ db, webDir, auth, runs }: AppDeps) {
     })
     .route("/me", meRoutes(auth))
     .route("/auth", authRoutes(auth))
+    .route("/auth/email", emailRoutes({ ...email, db, auth }))
     .route("/runs", runsRoutes(runs, auth));
 
   const app = new Hono().route("/api", api);
