@@ -6,6 +6,7 @@ const SESSION_SECRET = "s".repeat(32);
 const base = {
   DATABASE_URL,
   APP_URL: "http://localhost:5173/",
+  EMAIL_PROVIDER: "console",
   APPLE_TEAM_ID: "TEAM",
   APPLE_KEY_ID: "KEY",
   APPLE_PRIVATE_KEY: "PRIVATE",
@@ -69,6 +70,18 @@ describe("parseEnv", () => {
     expect(
       parseEnv({ ...base, APP_URL: "https://tunelynk.bytmoor.com//" }).APP_URL,
     ).toBe("https://tunelynk.bytmoor.com");
+  });
+
+  it("requires EMAIL_PROVIDER when cookies are secure (production)", () => {
+    const { EMAIL_PROVIDER: _omit, ...rest } = base;
+    expect(() => parseEnv(rest)).toThrow(/EMAIL_PROVIDER/);
+  });
+
+  it("defaults EMAIL_PROVIDER to console for local http", () => {
+    const { EMAIL_PROVIDER: _omit, ...rest } = base;
+    expect(parseEnv({ ...rest, COOKIE_SECURE: "false" }).EMAIL).toEqual({
+      provider: "console",
+    });
   });
 
   it("configures Resend when EMAIL_PROVIDER=resend", () => {

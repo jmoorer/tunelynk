@@ -145,10 +145,14 @@ Body `{ email, returnTo? }` (zod).
 Body `{ token }`.
 
 1. `UPDATE login_tokens SET used_at = now() WHERE token_hash = sha256($token) AND used_at IS NULL AND expires_at > now() RETURNING email, return_to, guest_user_id`. No row → `400 invalid_or_expired`.
-2. `finishSignIn({ method: 'email', subject: email }, [guest_user_id, currentGuestId], currentSessionId)`.
+2. `finishSignIn({ method: 'email', subject: email }, [guest_user_id], currentSessionId)`.
 3. Set the cookie and return `200 { returnTo }` (default `/`).
 
-Claiming both guests covers a link opened in a different cookie jar than the one that requested it, such as a phone mail app's in-app browser.
+Only the guest that requested the link is claimed. Claiming it through `guest_user_id` still covers a link opened in a different cookie jar, such as a phone mail app's in-app browser. The opening browser's own guest is never claimed: anyone could send someone their own sign-in link and take that person's guest drafts. (Changed during slice B review; it originally claimed both guests.)
+
+### `POST /api/auth/email/preview` (slice D)
+
+Body `{ token }`. Returns `200 { email }` for a valid, unused, unexpired token without consuming it. Otherwise it returns `400 invalid_or_expired`. The verify page uses it to ask "Continue as {email}?" before POSTing to verify, so a forwarded link can't silently sign someone into another person's account.
 
 ## Sign in with Apple (slice C)
 
@@ -217,8 +221,9 @@ Hand-rolled, following `lib/api.ts`: each wrapper zod-parses the response and re
 - **`/signin/check-email`.** "Check your inbox at {email}." with a **Resend** button. Success shows a muted "Sent again."
 - **`/signin/verify`.**
   1. Reads `#t`, then clears the hash with `history.replaceState`.
-  2. POSTs the token, showing "Signing you in…".
-  3. Success → `refresh()`, then navigate to `returnTo`.
+  2. Calls `preview` and shows "Continue as {email}?" with **Continue** and **Cancel**.
+  3. **Continue** POSTs the token, showing "Signing you in…".
+  4. Success → `refresh()`, then navigate to `returnTo`.
 - **Run view footer (draft).**
   - No user or a guest: **Sign in to keep** → `/signin?returnTo=/playlists/:p/runs/:r?keep=1`.
   - Signed-in owner: **Keep** (busy label "Keeping…") → "Kept ✓".
@@ -252,7 +257,7 @@ Buttons show busy labels and stay disabled while a request is in flight, as `Top
 | Var | Default | Notes |
 |---|---|---|
 | `APP_URL` | required | Public origin, no trailing slash: `https://tunelynk.bytmoor.com`; local `http://localhost:5173` (the Vite dev server, which proxies `/api`) |
-| `EMAIL_PROVIDER` | `console` | `console` or `resend` |
+| `EMAIL_PROVIDER` | `console` only when `COOKIE_SECURE=false` | `console` or `resend`. Required when `COOKIE_SECURE=true` (production), so a missing value never silently logs live links |
 | `RESEND_API_KEY` | — | Required when `EMAIL_PROVIDER=resend` |
 | `EMAIL_FROM` | — | Required when `EMAIL_PROVIDER=resend`, e.g. `Tunelynk <login@bytmoor.com>` |
 | `APPLE_SIGNIN_CLIENT_ID` | required | The Services ID, e.g. `com.bytmoor.tunelynk.web` |
@@ -301,6 +306,7 @@ TDD within each slice. Tests stay next to the code (#29 moves them later).
     - rate limit; reuse and expiry
     - `returnTo` sanitizing
     - claim through `guest_user_id` from another cookie jar
+    - the opening browser's guest is never claimed for a link it didn't request
     - mail failure deletes the token
     - the response is the same for new and existing emails
 - **C (Apple):**

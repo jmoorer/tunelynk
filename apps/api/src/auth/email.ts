@@ -69,14 +69,11 @@ export function emailRoutes(deps: EmailDeps & { db: Db; auth: AuthDeps }) {
       if (!consumed) {
         return c.json({ error: "invalid_or_expired" } satisfies ApiError, 400);
       }
-      const current = c.get("user");
       const { token } = await finishSignIn(deps.db, {
         identity: { method: "email", subject: consumed.email },
-        // The requesting browser's guest and this browser's guest.
-        guestUserIds: [
-          consumed.guestUserId,
-          current?.isGuest ? current.id : null,
-        ],
+        // Only the guest that requested the link. Claiming this browser's
+        // guest would let anyone who shares their own link take its drafts.
+        guestUserIds: [consumed.guestUserId],
         currentSessionId: c.get("sessionId"),
       });
       setSessionCookie(c, token, deps.auth.secureCookies);

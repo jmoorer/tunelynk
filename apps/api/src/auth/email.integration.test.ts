@@ -229,12 +229,21 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/auth/email", () => {
     expect(await sessionRepo.resolve(guest.token)).toBeUndefined();
   });
 
-  it("claims the verifying browser's guest", async () => {
+  it("claims the guest when one browser requests and opens the link", async () => {
     const guest = await guestWithPlaylist();
-    await start("a@b.co");
+    await start("a@b.co", guest.cookie);
     const res = await verify(lastToken(), guest.cookie);
     const account = (await me(sessionCookie(res))).user;
     expect(await ownerOf(guest.playlistId)).toBe(account?.id);
+  });
+
+  it("never claims the opening browser's guest for a link it didn't request", async () => {
+    // Someone shares their own sign-in link with a guest who has drafts.
+    const victim = await guestWithPlaylist();
+    await start("attacker@b.co");
+    const res = await verify(lastToken(), victim.cookie);
+    expect(res.status).toBe(200);
+    expect(await ownerOf(victim.playlistId)).toBe(victim.userId);
   });
 
   it("still signs in when the requesting guest is gone", async () => {

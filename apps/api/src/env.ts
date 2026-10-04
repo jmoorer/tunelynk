@@ -38,7 +38,9 @@ const EnvSchema = z
     OPENAI_API_KEY: z.string().optional(),
     LLM_MAX_TOKENS: positiveInt(2000),
     LLM_DAILY_BUDGET_USD: positiveNumber(2),
-    EMAIL_PROVIDER: z.enum(["console", "resend"]).default("console"),
+    // Unset means console, allowed only for local http (COOKIE_SECURE=false),
+    // so production never logs live sign-in links by accident.
+    EMAIL_PROVIDER: z.enum(["console", "resend"]).optional(),
     RESEND_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
   })
@@ -62,6 +64,15 @@ const EnvSchema = z
         code: "custom",
         path: ["LLM_MODEL_GUEST"],
         message: err instanceof Error ? err.message : String(err),
+      });
+      return z.NEVER;
+    }
+    if (!env.EMAIL_PROVIDER && env.COOKIE_SECURE) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["EMAIL_PROVIDER"],
+        message:
+          "required when COOKIE_SECURE=true (resend, or console to log links)",
       });
       return z.NEVER;
     }
