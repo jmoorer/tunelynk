@@ -12,6 +12,7 @@ const base = {
   APPLE_PRIVATE_KEY: "PRIVATE",
   SESSION_SECRET,
   ANTHROPIC_API_KEY: "sk-ant",
+  APPLE_SIGNIN_CLIENT_ID: "com.bytmoor.tunelynk.web",
 };
 
 describe("parseEnv", () => {
@@ -35,6 +36,11 @@ describe("parseEnv", () => {
       LLM_MAX_TOKENS: 2000,
       LLM_DAILY_BUDGET_USD: 2,
       EMAIL: { provider: "console" },
+      APPLE_SIGNIN: {
+        clientId: "com.bytmoor.tunelynk.web",
+        keyId: "KEY",
+        privateKey: "PRIVATE",
+      },
     });
   });
 
@@ -112,6 +118,25 @@ describe("parseEnv", () => {
       expect(() => parseEnv(env)).toThrow(new RegExp(name));
     },
   );
+
+  it("requires APPLE_SIGNIN_CLIENT_ID", () => {
+    const { APPLE_SIGNIN_CLIENT_ID: _omit, ...rest } = base;
+    expect(() => parseEnv(rest)).toThrow(/APPLE_SIGNIN_CLIENT_ID/);
+  });
+
+  it("uses a separate Sign in with Apple key when given", () => {
+    const env = parseEnv({
+      ...base,
+      APPLE_SIGNIN_KEY_ID: "SIWAKEY",
+      APPLE_SIGNIN_PRIVATE_KEY: "SIWAPRIVATE",
+    });
+    expect(env.APPLE_SIGNIN).toEqual({
+      clientId: "com.bytmoor.tunelynk.web",
+      keyId: "SIWAKEY",
+      privateKey: "SIWAPRIVATE",
+    });
+    expect(env).not.toHaveProperty("APPLE_SIGNIN_KEY_ID");
+  });
 
   it("parses COOKIE_SECURE=false", () => {
     expect(parseEnv({ ...base, COOKIE_SECURE: "false" }).COOKIE_SECURE).toBe(
