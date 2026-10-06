@@ -223,4 +223,50 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/auth/apple", () => {
       "secret-code-123",
     );
   });
+
+  it("reports Apple as available", async () => {
+    const res = await app.request("/api/auth/providers");
+    expect(await res.json()).toEqual({ email: true, apple: true });
+  });
+
+  describe("with Apple sign-in not configured", () => {
+    let off: ReturnType<typeof createApp>;
+    beforeAll(() => {
+      off = createApp({
+        db: handle.db,
+        auth: {
+          sessions: sessionRepo,
+          sessionSecret: SECRET,
+          secureCookies: false,
+        },
+        email: {} as EmailDeps,
+        apple: {
+          client: null,
+          logger: { error: (...args) => errors.push(args) },
+        },
+        runs: {} as RunsDeps,
+      });
+    });
+
+    it("reports Apple as unavailable", async () => {
+      const res = await off.request("/api/auth/providers");
+      expect(await res.json()).toEqual({ email: true, apple: false });
+    });
+
+    it("start bounces back to sign-in without contacting Apple", async () => {
+      const res = await off.request("/api/auth/apple/start?returnTo=%2Fx");
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe(
+        "/signin?error=apple&returnTo=%2Fx",
+      );
+      expect(res.headers.getSetCookie()).toEqual([]);
+    });
+
+    it("callback bounces back to sign-in", async () => {
+      const res = await off.request("/api/auth/apple/callback?code=c&state=s");
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/signin?error=apple");
+      expect(exchange).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -119,9 +119,11 @@ describe("parseEnv", () => {
     },
   );
 
-  it("requires APPLE_SIGNIN_CLIENT_ID", () => {
+  it("turns Apple sign-in off without APPLE_SIGNIN_CLIENT_ID", () => {
     const { APPLE_SIGNIN_CLIENT_ID: _omit, ...rest } = base;
-    expect(() => parseEnv(rest)).toThrow(/APPLE_SIGNIN_CLIENT_ID/);
+    const env = parseEnv({ ...rest, APPLE_SIGNIN_KEY_ID: "SIWAKEY" });
+    expect(env.APPLE_SIGNIN).toBeNull();
+    expect(env).not.toHaveProperty("APPLE_SIGNIN_KEY_ID");
   });
 
   it("uses a separate Sign in with Apple key when given", () => {

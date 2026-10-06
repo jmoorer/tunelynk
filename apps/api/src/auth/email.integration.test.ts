@@ -4,7 +4,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import type { RunsDeps } from "../runs/routes";
 import { createTestDatabase } from "../test/db";
-import type { AppleDeps } from "./appleRoutes";
 import { createLoginTokenRepo } from "./loginTokens";
 import type { Mailer } from "./mailer";
 import { createSessionRepo, type SessionRepo } from "./sessions";
@@ -42,7 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/auth/email", () => {
         appUrl: APP_URL,
         logger: { error: () => {} },
       },
-      apple: {} as AppleDeps,
+      apple: { client: null },
       runs: {} as RunsDeps,
     });
   });

@@ -216,7 +216,7 @@ Hand-rolled, following `lib/api.ts`: each wrapper zod-parses the response and re
 - **TopBar.** The right side shows a **Sign in** link (`/signin?returnTo=<current path>`) or the account label with a **Sign out** action. Sign out calls the API, then `refresh()`. If the call fails, the app clears `me` locally anyway and logs the error.
 - **`/signin`.**
   - Email form. Client-side zod validation shows "Enter a valid email address." inline, and submit stays disabled until the address is valid. Success → `/signin/check-email?email=…&returnTo=…`.
-  - **Sign in with Apple** button: a plain link to `/api/auth/apple/start?returnTo=…`.
+  - **Sign in with Apple** button: a plain link to `/api/auth/apple/start?returnTo=…`, shown only when `GET /api/auth/providers` reports `apple: true`.
   - `?error=apple` shows a banner, then is removed from the URL.
 - **`/signin/check-email`.** "Check your inbox at {email}." with a **Resend** button. Success shows a muted "Sent again."
 - **`/signin/verify`.**
@@ -260,7 +260,7 @@ Buttons show busy labels and stay disabled while a request is in flight, as `Top
 | `EMAIL_PROVIDER` | `console` only when `COOKIE_SECURE=false` | `console` or `resend`. Required when `COOKIE_SECURE=true` (production), so a missing value never silently logs live links |
 | `RESEND_API_KEY` | — | Required when `EMAIL_PROVIDER=resend` |
 | `EMAIL_FROM` | — | Required when `EMAIL_PROVIDER=resend`, e.g. `Tunelynk <login@bytmoor.com>` |
-| `APPLE_SIGNIN_CLIENT_ID` | required | The Services ID, e.g. `com.bytmoor.tunelynk.web` |
+| `APPLE_SIGNIN_CLIENT_ID` | — (Apple sign-in off) | The Services ID, e.g. `com.bytmoor.tunelynk.web`. Optional since 2026-10-06 (the Apple Developer membership lapsed): unset ⇒ Apple routes redirect to `/signin?error=apple` and `GET /api/auth/providers` returns `{ email: true, apple: false }` |
 | `APPLE_SIGNIN_KEY_ID` | `APPLE_KEY_ID` | Override to use a separate Sign in with Apple key |
 | `APPLE_SIGNIN_PRIVATE_KEY` | `APPLE_PRIVATE_KEY` | Same formats as `APPLE_PRIVATE_KEY` |
 

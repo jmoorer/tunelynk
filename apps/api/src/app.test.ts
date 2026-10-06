@@ -10,7 +10,7 @@ const runs = {} as RunsDeps; // health/static tests never hit /api/runs
 // No cookies are sent in these tests, so the middleware never touches the repo.
 const auth = {} as AuthDeps;
 const email = {} as EmailDeps; // never hit here
-const apple = {} as AppleDeps; // never hit here
+const apple: AppleDeps = { client: null }; // never hit here
 
 // ping(db) calls db.execute; a fake with only execute is enough.
 function fakeDb(execute: () => Promise<unknown>): Db {

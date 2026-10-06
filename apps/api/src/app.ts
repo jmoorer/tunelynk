@@ -48,7 +48,10 @@ export function createApp({ db, webDir, auth, email, apple, runs }: AppDeps) {
       return c.json({ ok: true, db: dbStatus } satisfies HealthResponse);
     })
     .route("/me", meRoutes(auth))
-    .route("/auth", authRoutes(auth))
+    .route(
+      "/auth",
+      authRoutes(auth, { email: true, apple: apple.client !== null }),
+    )
     .route("/auth/email", emailRoutes({ ...email, db, auth }))
     .route("/auth/apple", appleRoutes({ ...apple, db, auth }))
     .route("/runs", runsRoutes(runs, auth));

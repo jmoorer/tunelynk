@@ -12,7 +12,8 @@ const COOKIE_PATH = "/api/auth/apple";
 const STATE_TTL_SECONDS = 600;
 
 export type AppleDeps = {
-  client: AppleClient;
+  // Null when Apple sign-in is not configured (APPLE_SIGNIN_CLIENT_ID unset).
+  client: AppleClient | null;
   logger?: Pick<Console, "error">;
 };
 
@@ -47,6 +48,19 @@ export function appleRoutes(deps: AppleDeps & { db: Db; auth: AuthDeps }) {
     path: COOKIE_PATH,
   } as const;
 
+  const { client } = deps;
+  if (!client) {
+    // Off: send people back to sign-in, which then offers email only.
+    const off = new Hono<AuthEnv>();
+    off.get("/*", (c) => {
+      const query = new URLSearchParams({ error: "apple" });
+      const returnTo = safeReturnTo(c.req.query("returnTo"));
+      if (returnTo) query.set("returnTo", returnTo);
+      return c.redirect(`/signin?${query}`, 302);
+    });
+    return off;
+  }
+
   return new Hono<AuthEnv>()
     .get("/start", async (c) => {
       const saved: SavedState = {
@@ -62,7 +76,7 @@ export function appleRoutes(deps: AppleDeps & { db: Db; auth: AuthDeps }) {
         { ...cookieOptions, maxAge: STATE_TTL_SECONDS },
       );
       return c.redirect(
-        deps.client.authorizeUrl({ state: saved.state, nonce: saved.nonce }),
+        client.authorizeUrl({ state: saved.state, nonce: saved.nonce }),
         302,
       );
     })
@@ -91,7 +105,7 @@ export function appleRoutes(deps: AppleDeps & { db: Db; auth: AuthDeps }) {
 
       let sub: string;
       try {
-        ({ sub } = await deps.client.exchange(code, saved.nonce));
+        ({ sub } = await client.exchange(code, saved.nonce));
       } catch (err) {
         return fail("code exchange or id_token check", err);
       }

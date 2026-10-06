@@ -33,3 +33,10 @@ export type EmailVerifyRequest = z.infer<typeof EmailVerifyRequest>;
 
 export const EmailVerifyResponse = z.object({ returnTo: z.string() });
 export type EmailVerifyResponse = z.infer<typeof EmailVerifyResponse>;
+
+// Sign-in methods this deployment offers (Apple needs portal setup).
+export const AuthProviders = z.object({
+  email: z.boolean(),
+  apple: z.boolean(),
+});
+export type AuthProviders = z.infer<typeof AuthProviders>;
