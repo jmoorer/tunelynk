@@ -27,6 +27,11 @@ const EnvSchema = z
     APPLE_CATALOG_RPS: positiveNumber(8),
     APPLE_CATALOG_BURST: positiveInt(10),
     APPLE_CATALOG_CONCURRENCY: positiveInt(4),
+    // Sign in with Apple: the Services ID; the key defaults to the MusicKit key.
+    // Unset turns Apple sign-in off (it needs an active Apple Developer account).
+    APPLE_SIGNIN_CLIENT_ID: z.string().min(1).optional(),
+    APPLE_SIGNIN_KEY_ID: z.string().optional(),
+    APPLE_SIGNIN_PRIVATE_KEY: z.string().optional(),
     SESSION_SECRET: z.string().min(32),
     COOKIE_SECURE: z
       .enum(["true", "false"])
@@ -102,6 +107,9 @@ const EnvSchema = z
       EMAIL_PROVIDER: _provider,
       RESEND_API_KEY: _resend,
       EMAIL_FROM: _from,
+      APPLE_SIGNIN_CLIENT_ID: signinClientId,
+      APPLE_SIGNIN_KEY_ID: signinKeyId,
+      APPLE_SIGNIN_PRIVATE_KEY: signinPrivateKey,
       ...rest
     } = env;
     return {
@@ -109,6 +117,13 @@ const EnvSchema = z
       LLM_MODEL_GUEST: model,
       LLM_API_KEY: apiKey,
       EMAIL: email,
+      APPLE_SIGNIN: signinClientId
+        ? {
+            clientId: signinClientId,
+            keyId: signinKeyId ?? rest.APPLE_KEY_ID,
+            privateKey: signinPrivateKey ?? rest.APPLE_PRIVATE_KEY,
+          }
+        : null,
     };
   });
 

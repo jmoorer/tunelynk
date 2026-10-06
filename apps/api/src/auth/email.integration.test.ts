@@ -41,6 +41,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/auth/email", () => {
         appUrl: APP_URL,
         logger: { error: () => {} },
       },
+      apple: { client: null },
       runs: {} as RunsDeps,
     });
   });

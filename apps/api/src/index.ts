@@ -3,6 +3,7 @@ import { createAppleCatalog } from "@tunelynk/connectors";
 import { createDb } from "@tunelynk/db";
 import { costMicros, createLlmProvider, generate } from "@tunelynk/engine";
 import { createApp } from "./app";
+import { createAppleClient } from "./auth/apple";
 import { createLoginTokenRepo } from "./auth/loginTokens";
 import { createMailer } from "./auth/mailer";
 import { createSessionRepo } from "./auth/sessions";
@@ -13,6 +14,9 @@ import { createRunRepo } from "./runs/repo";
 import { startStaleRunSweeper } from "./runs/sweeper";
 
 const env = loadEnv();
+if (!env.APPLE_SIGNIN) {
+  console.warn("APPLE_SIGNIN_CLIENT_ID unset: Sign in with Apple is off");
+}
 if (env.EMAIL.provider === "console") {
   console.warn("EMAIL_PROVIDER=console: sign-in links are logged, not sent");
 }
@@ -53,6 +57,17 @@ const app = createApp({
     loginTokens: createLoginTokenRepo(db),
     mailer: createMailer(env.EMAIL),
     appUrl: env.APP_URL,
+  },
+  apple: {
+    client: env.APPLE_SIGNIN
+      ? createAppleClient({
+          clientId: env.APPLE_SIGNIN.clientId,
+          teamId: env.APPLE_TEAM_ID,
+          keyId: env.APPLE_SIGNIN.keyId,
+          privateKey: env.APPLE_SIGNIN.privateKey,
+          redirectUri: `${env.APP_URL}/api/auth/apple/callback`,
+        })
+      : null,
   },
   runs: {
     repo,

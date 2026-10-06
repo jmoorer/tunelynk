@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AuthProviders,
   EmailStartRequest,
   EmailVerifyRequest,
   EmailVerifyResponse,
@@ -79,5 +80,18 @@ describe("EmailVerifyResponse", () => {
     expect(EmailVerifyResponse.parse({ returnTo: "/" })).toEqual({
       returnTo: "/",
     });
+  });
+});
+
+describe("AuthProviders", () => {
+  it.each([
+    { email: true, apple: true },
+    { email: true, apple: false },
+  ])("accepts %o", (payload) => {
+    expect(AuthProviders.parse(payload)).toEqual(payload);
+  });
+
+  it("rejects a missing flag", () => {
+    expect(AuthProviders.safeParse({ email: true }).success).toBe(false);
   });
 });

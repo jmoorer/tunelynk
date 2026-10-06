@@ -1,4 +1,4 @@
-import type { MeResponse } from "@tunelynk/shared";
+import type { AuthProviders, MeResponse } from "@tunelynk/shared";
 import { Hono } from "hono";
 import { type AuthDeps, type AuthEnv, clearSessionCookie } from "./middleware";
 
@@ -11,11 +11,13 @@ export function meRoutes(deps: AuthDeps) {
   });
 }
 
-export function authRoutes(deps: AuthDeps) {
-  return new Hono<AuthEnv>().post("/signout", async (c) => {
-    const sessionId = c.get("sessionId");
-    if (sessionId) await deps.sessions.deleteSession(sessionId);
-    clearSessionCookie(c, deps.secureCookies);
-    return c.body(null, 204);
-  });
+export function authRoutes(deps: AuthDeps, providers: AuthProviders) {
+  return new Hono<AuthEnv>()
+    .get("/providers", (c) => c.json(providers satisfies AuthProviders))
+    .post("/signout", async (c) => {
+      const sessionId = c.get("sessionId");
+      if (sessionId) await deps.sessions.deleteSession(sessionId);
+      clearSessionCookie(c, deps.secureCookies);
+      return c.body(null, 204);
+    });
 }

@@ -25,6 +25,7 @@
     "@tunelynk/shared": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.10",
+    "jose": "~6.2.12",
     "openai": "~7.25.0",
     "zod": "^4.6.5"
   },

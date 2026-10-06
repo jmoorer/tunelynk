@@ -37,3 +37,4 @@ export function createAppleCatalog(config: AppleCatalogConfig): CatalogSource {
 }
 
 export { AppleApiError } from "./client";
+export { loadPrivateKey } from "./devToken";

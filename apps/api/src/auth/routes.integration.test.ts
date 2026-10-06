@@ -36,6 +36,7 @@ describe.skipIf(!process.env.DATABASE_URL)(
         db: handle.db,
         auth: { sessions: repo, sessionSecret: SECRET, secureCookies: false },
         email: {} as EmailDeps,
+        apple: { client: null },
         runs: {} as RunsDeps, // never hit here
       });
     });

@@ -91,6 +91,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
           },
         },
         email: {} as EmailDeps,
+        apple: { client: null },
         runs: {
           repo,
           executor: {
@@ -408,6 +409,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
         secureCookies: false,
       },
       email: {} as EmailDeps,
+      apple: { client: null },
       runs: {
         repo: {
           ...repo,
