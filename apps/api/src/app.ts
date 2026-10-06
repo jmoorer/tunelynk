@@ -4,6 +4,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { type Db, ping } from "@tunelynk/db";
 import type { HealthResponse } from "@tunelynk/shared";
 import { Hono } from "hono";
+import { type AppleDeps, appleRoutes } from "./auth/appleRoutes";
 import { type EmailDeps, emailRoutes } from "./auth/email";
 import {
   type AuthDeps,
@@ -19,6 +20,7 @@ export type AppDeps = {
   webDir?: string;
   auth: AuthDeps;
   email: EmailDeps;
+  apple: AppleDeps;
   runs: RunsDeps;
 };
 
@@ -33,7 +35,7 @@ const cacheControl = (path: string) =>
     ? "public, max-age=31536000, immutable"
     : "no-cache";
 
-export function createApp({ db, webDir, auth, email, runs }: AppDeps) {
+export function createApp({ db, webDir, auth, email, apple, runs }: AppDeps) {
   const api = new Hono<AuthEnv>()
     .use("*", sessionMiddleware(auth))
     .get("/health", async (c) => {
@@ -48,6 +50,7 @@ export function createApp({ db, webDir, auth, email, runs }: AppDeps) {
     .route("/me", meRoutes(auth))
     .route("/auth", authRoutes(auth))
     .route("/auth/email", emailRoutes({ ...email, db, auth }))
+    .route("/auth/apple", appleRoutes({ ...apple, db, auth }))
     .route("/runs", runsRoutes(runs, auth));
 
   const app = new Hono().route("/api", api);

@@ -37,6 +37,7 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    APPLE_TEAM_ID=<Apple developer team id>
    APPLE_KEY_ID=<MusicKit key id>
    APPLE_PRIVATE_KEY=<base64 of the MusicKit .p8 file>
+   APPLE_SIGNIN_CLIENT_ID=com.bytmoor.tunelynk.web
    SESSION_SECRET=<32+ random chars: openssl rand -base64 48>
    LLM_PROVIDER=anthropic
    ANTHROPIC_API_KEY=<key with credit>
@@ -46,6 +47,12 @@ Dokploy-managed Postgres, at https://tunelynk.bytmoor.com. Every push to
    **Set these before a deploy that includes the runs API.** The server validates them at boot and exits if any are missing. The new container then never becomes healthy and the old one keeps serving, but the deploy fails. `migrate.js` needs only `DATABASE_URL`.
 
    **Resend (magic-link email).** Create a Resend account, add the sending domain `bytmoor.com` (Domains → Add), and create the DNS records Resend lists (an SPF `TXT` and the DKIM `TXT`/`CNAME` records; DMARC is optional) at the DNS provider. Wait until Resend shows the domain as **Verified**, then create an API key with **Sending access** and put it in `RESEND_API_KEY`. `EMAIL_FROM` must use the verified domain. `EMAIL_PROVIDER` is required in production (`COOKIE_SECURE` unset or `true`); the server exits at boot without it. `EMAIL_PROVIDER=console` logs sign-in links instead of sending them, so anyone with log access could use them. Use it only for local http.
+
+   **Sign in with Apple.** In the Apple Developer portal (Certificates, Identifiers & Profiles):
+   1. **Identifiers → + → App IDs → App**: description `Tunelynk`, Bundle ID (explicit) `com.bytmoor.tunelynk`, enable **Sign in with Apple**. Register.
+   2. **Identifiers → + → Services IDs**: description `Tunelynk Web`, identifier `com.bytmoor.tunelynk.web`. Register, open it, tick **Sign in with Apple → Configure**: primary App ID `com.bytmoor.tunelynk`, domain `tunelynk.bytmoor.com`, return URL `https://tunelynk.bytmoor.com/api/auth/apple/callback`. Save, then Continue/Save.
+   3. **Keys**: open the MusicKit key (`APPLE_KEY_ID`) → Edit → enable **Sign in with Apple** → Configure → primary App ID `com.bytmoor.tunelynk` → Save. If the portal won't edit that key, create a new key with only Sign in with Apple and set `APPLE_SIGNIN_KEY_ID` and `APPLE_SIGNIN_PRIVATE_KEY` (base64 of its `.p8`).
+   4. Set `APPLE_SIGNIN_CLIENT_ID` to the Services ID. Apple does not allow `localhost` return URLs; local end-to-end tests need an HTTPS tunnel whose domain and return URL are added to the Services ID.
 
    No `NODE_ENV` is needed; the app does not read it. (The Dockerfile forces `NODE_ENV=development` for `pnpm install`, so the build is safe even if one is set.)
 4. **Domain.** Host `tunelynk.bytmoor.com`, container port `3000`, HTTPS on,

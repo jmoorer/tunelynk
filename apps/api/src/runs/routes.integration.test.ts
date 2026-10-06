@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { generateSignedCookie } from "hono/cookie";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../app";
+import type { AppleDeps } from "../auth/appleRoutes";
 import type { EmailDeps } from "../auth/email";
 import { createSessionRepo } from "../auth/sessions";
 import { finishSignIn } from "../auth/signIn";
@@ -91,6 +92,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
           },
         },
         email: {} as EmailDeps,
+        apple: {} as AppleDeps,
         runs: {
           repo,
           executor: {
@@ -408,6 +410,7 @@ describe.skipIf(!process.env.DATABASE_URL)("/api/runs", () => {
         secureCookies: false,
       },
       email: {} as EmailDeps,
+      apple: {} as AppleDeps,
       runs: {
         repo: {
           ...repo,
