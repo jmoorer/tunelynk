@@ -87,7 +87,19 @@ export function createAppleClient(
         signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
       });
       if (!res.ok) {
-        throw new AppleSignInError(`token endpoint responded ${res.status}`);
+        // Apple's OAuth error code (invalid_client, invalid_grant, ...) is the
+        // only clue to a portal misconfiguration; anything else is dropped.
+        const detail = (await res.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        const code =
+          typeof detail?.error === "string" &&
+          /^[a-z_]{1,64}$/.test(detail.error)
+            ? ` (${detail.error})`
+            : "";
+        throw new AppleSignInError(
+          `token endpoint responded ${res.status}${code}`,
+        );
       }
       const body = (await res.json().catch(() => null)) as {
         id_token?: unknown;

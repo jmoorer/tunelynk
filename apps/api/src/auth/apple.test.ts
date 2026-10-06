@@ -146,6 +146,20 @@ describe("createAppleClient", () => {
     ).rejects.toThrow(/400/);
   });
 
+  it("puts Apple's error code in the failure message", async () => {
+    const fetch = tokenEndpoint({ error: "invalid_client" }, 400);
+    await expect(
+      createAppleClient(config, { keys, fetch }).exchange("code-1", "n-1"),
+    ).rejects.toThrow("token endpoint responded 400 (invalid_client)");
+  });
+
+  it("ignores a non-code error value in the message", async () => {
+    const fetch = tokenEndpoint({ error: "bad\nforged log line" }, 400);
+    await expect(
+      createAppleClient(config, { keys, fetch }).exchange("code-1", "n-1"),
+    ).rejects.toThrow(/^token endpoint responded 400$/);
+  });
+
   it("rejects a response without an id_token", async () => {
     const fetch = tokenEndpoint({ access_token: "x" });
     await expect(
